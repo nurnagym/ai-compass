@@ -1745,3 +1745,129 @@ textarea::placeholder {
     scroll-behavior: auto !important;
   }
 }
+
+/* Timeboxing is a gentle nudge: always extendable/disableable, with no fabricated answer on expiry. */
+.answer-timer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: -8px 0 23px;
+  padding: 8px 12px;
+  border: 1px solid #dce5dd;
+  border-radius: 12px;
+  background: #eef3ee;
+  color: #3e5d49;
+}
+.timer-caption {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  flex: 1;
+}
+.timer-caption svg {
+  flex-shrink: 0;
+}
+.timer-value {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.4px;
+}
+.timer-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.timer-controls button {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  padding: 8px;
+  min-height: 44px;
+  background: none;
+  color: #3e5d49;
+  border-radius: 7px;
+}
+.timer-controls button:hover {
+  background: #dde8df;
+}
+.timer-expired {
+  background: #f5eee4;
+  border-color: #e6d8c5;
+  color: #725c36;
+}
+.timer-nudge {
+  font-size: 12px;
+  line-height: 1.7;
+  margin: -8px 0 22px;
+  color: #725c36;
+}
+.own-answer-hint {
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 0 0 12px;
+  color: #5d6d62;
+}
+.answer-format-toggle {
+  display: flex;
+  margin: 15px auto 0;
+  font-size: 12px;
+}
+@media (max-width: 520px) {
+  .answer-timer {
+    padding: 7px 10px;
+    gap: 4px 8px;
+  }
+  .timer-caption {
+    font-size: 10px;
+  }
+  .timer-controls {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .timer-controls button {
+    font-size: 10px;
+  }
+}
+.entry-choices {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.entry-choices .choice-card {
+  flex-direction: column;
+  align-items: flex-start;
+  position: relative;
+  min-height: 143px;
+  gap: 12px;
+}
+.entry-choices .check-circle {
+  position: absolute;
+  right: 14px;
+  top: 18px;
+  color: #496954;
+  border: none;
+}
+.entry-choices .choice-copy {
+  gap: 5px;
+}
+@media (max-width: 520px) {
+  .entry-choices .choice-card {
+    min-height: 141px;
+    padding: 15px 12px;
+  }
+  .entry-choices .asset-tile {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+  .entry-choices .choice-copy strong {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .entry-choices .choice-copy small {
+    font-size: 10px;
+    line-height: 1.5;
+  }
+}

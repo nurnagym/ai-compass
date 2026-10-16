@@ -23,7 +23,7 @@ export function evaluateTool(
     (c) => !c.negative && tool.supportedUseCases.includes(c.domain),
   )
   const conflict = memory.contradictions.some((c) => tool.supportedUseCases.includes(c.domain))
-  const negative = [...memory.confirmedFacts, ...memory.goals, ...memory.interests].some(
+  const negative = [...memory.confirmedFacts, ...memory.goals].some(
     (c) => c.negative && tool.supportedUseCases.includes(c.domain),
   )
   if (negative || conflict || tool.verificationStatus !== 'verified') return null
@@ -99,24 +99,19 @@ export function rankTools(memory: Memory, history: Interaction[]): Recommendatio
     .sort((a, b) => b.score - a.score || a.toolId.localeCompare(b.toolId))
   const selected: Recommendation[] = []
   const categories = new Set<string>()
-  // Diversity only breaks close matches; it never replaces a substantially stronger fit.
-  for (const r of ranked) {
-    const tool = verifiedCatalog.find((t) => t.id === r.toolId)!
-    if (
-      selected.length &&
-      categories.has(tool.category) &&
-      ranked.some(
-        (x) =>
-          !categories.has(verifiedCatalog.find((t) => t.id === x.toolId)!.category) &&
-          x.score >= r.score - 10,
-      )
+  // Choose each slot from remaining candidates. A diversity tie-break must not discard
+  // a stronger match permanently, then fill a later slot with a weaker duplicate category.
+  const remaining = [...ranked]
+  const category = (r: Recommendation) => verifiedCatalog.find((t) => t.id === r.toolId)!.category
+  while (selected.length < 3 && remaining.length) {
+    const diverse = remaining.findIndex(
+      (r) => !categories.has(category(r)) && r.score >= remaining[0].score - 10,
     )
-      continue
-    selected.push(r)
-    categories.add(tool.category)
-    if (selected.length === 3) break
+    const [next] = remaining.splice(diverse >= 0 ? diverse : 0, 1)
+    selected.push(next)
+    categories.add(category(next))
   }
-  return selected
+  return selected.sort((a, b) => b.score - a.score || a.toolId.localeCompare(b.toolId))
 }
 export function questionPriority(gap: string, memory: Memory, asked: string[]): number {
   if (asked.includes(gap)) return 0

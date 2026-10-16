@@ -1,6 +1,6 @@
 # AI Compass
 
-A Russian-first, session-only AI discovery experience. A short conversation becomes up to three useful tool discoveries, each with evidence, a practical first action, and an official product link. No accounts, database, or saved personal profile.
+A Russian-first, session-only AI discovery experience. A few quick choices become up to three useful tool discoveries, each with evidence, a practical first action, and an official product link. No accounts, database, or saved personal profile.
 
 ## Start locally
 
@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open the address printed by Vite in your own browser. Demo mode is the default: it needs no API key and makes no paid API calls. Start with your own text or one of four example personas. Demo responses use keyword-based simulation, **not a real AI director**. Answers are sent to the same-origin Worker for in-memory processing, not to OpenAI. The development-only component gallery is available using the footer or `/#gallery`; it is excluded from production.
+Open the address printed by Vite in your own browser. Demo mode is the default: it needs no API key and makes no paid API calls. Start by choosing one of four activity cards. Every subsequent question offers ready-made answers; text and voice are optional through «Ответить своими словами». Demo responses use keyword-based simulation, **not a real AI director**. Answers are sent to the same-origin Worker for in-memory processing, not to OpenAI. The development-only component gallery is available using the footer or `/#gallery`; it is excluded from production.
 
 In the restricted cloud workspace, use writable tool paths:
 
@@ -21,6 +21,18 @@ export XDG_CONFIG_HOME=/tmp/ai-compass-config
 npm ci
 npm run dev -- --port 5173
 ```
+
+## Quick answers and visible interaction variety
+
+The previous three mandatory open questions are removed. The default journey starts with one-tap activity cards. The next question narrows the need using This-or-That or a short scenario, then a relevant swipe interaction appears by the third question. Installation constraints are checked before the first possible completion at four interactions. Tool recognition and additional scenarios appear only when more information is useful. The journey remains bounded at seven; it does not force every person through all six components.
+
+Single-selection cards advance immediately. Multiple-selection cards still require Continue. Users may switch to an editable short text/voice answer and back to choices; the draft survives that switch. These answers still have source provenance and go through the same evidence evaluation.
+
+Each question has a **20-second timebox**, configurable through `ANSWER_SECONDS` in `src/hooks/useAnswerTimer.ts`. Users can add 20 seconds or disable time limits for the current session. It pauses when the tab is hidden, the privacy dialog is open, or microphone permission/recording/transcription is in progress; each new swipe card gets a fresh budget. Expiry shows a gentle prompt and preserves the draft; it does not submit an unconfirmed answer or silently skip a question. Restart resets the session and timer preference.
+
+In demo mode the server extracts explicit keywords from chosen labels (or optional text), updates evidence, and selects from curated question content according to current needs and used formats. This is **deterministic simulation, not AI**. Unselected options are not evidence. Recognizing a product name does not imply using it or needing its category; a rejected swipe is a specific preference rather than a blanket contradiction of every activity in that domain.
+
+In live mode the existing OpenAI integration proposes the next question/content through Structured Outputs. The same application guardrails prevent mandatory essays, introduce swipes early, check constraints, enforce budgets and independently decide readiness. A key plus `AI_ENABLED=true` is required to activate live calls. This update does not enable paid calls.
 
 ## Enable the real AI director and voice
 
@@ -76,7 +88,7 @@ No deployment has been performed by this build task. A Cloudflare account and va
 
 ## Structure
 
-- `src/components/onboarding/` — six fixed, accessible interaction components, renderer and dev gallery
+- `src/components/onboarding/` — six fixed, accessible interaction components, quick-answer/timer wrapper and dev gallery
 - `src/features/onboarding/` — explicit session state machine, ephemeral memory, demo director and orchestration
 - `src/features/evidence/` — deterministic evidence readiness, constraints, diversity ranking, information-gain heuristics
 - `src/data/tools.json` — editable 40-product catalog, including 30 source-verified active entries
@@ -94,11 +106,11 @@ Some popular cloud products remain pending because their authoritative product p
 
 ## Readiness and question priorities
 
-`src/features/evidence/evaluator.ts` documents prototype RRS heuristics: coverage up to 40, reliability up to 35, fit up to 25. These numbers are **not calibrated probabilities** and are not shown to users. Strong results require explicit positive evidence from at least two source interactions, a verified matching capability, score at least 75, and no known contradiction/incompatibility. Model hypotheses never raise readiness. Negative evidence and unresolved contradictions disqualify matching candidates. Unfamiliarity is not classified as use. Familiar products receive a ranking penalty, not blanket exclusion.
+`src/features/evidence/evaluator.ts` documents prototype RRS heuristics: coverage up to 40, reliability up to 35, fit up to 25. These numbers are **not calibrated probabilities** and are not shown to users. Strong results require explicit positive evidence from at least two source interactions, a verified matching capability, score at least 75, and no known contradiction/incompatibility. Model hypotheses never raise readiness. Explicit negative facts/goals and unresolved factual contradictions disqualify matching candidates; negative swipe interests do not erase unrelated positive needs. Unfamiliarity is not classified as use. Familiar products receive a ranking penalty, not blanket exclusion.
 
 Unknown needs yield clearly labeled exploratory ideas; incompatible tools are filtered even from exploratory results. Fewer than three results (including none) is valid when constraints leave insufficient candidates. We do not manufacture certainty. More refined per-capability device/OS/price constraints are future work; review the displayed limitations before installing any recommended tool.
 
-Question-priority heuristics rank contradictions (100), installation constraints (85), familiarity (65), and supported needs (55), while suppressing repeated adaptive gaps. The model can propose completion but cannot override minimum interaction/evidence rules. The interview aims for 4–7 answers and always terminates at seven. Back removes later evidence so a corrected answer is re-evaluated; restart clears the entire session. Conflicting statements are not silently treated as corrections—use Back to correct the source answer.
+Question-priority heuristics rank contradictions (100), installation constraints (85), familiarity (65), and supported needs (55), while checking gaps together with their interaction format to allow focused clarification through a different mechanic. The model can propose completion but cannot override minimum interaction/evidence rules. The interview aims for 4–7 answers and always terminates at seven. Back removes later evidence so a corrected answer is re-evaluated; restart clears the entire session. Conflicting statements are not silently treated as corrections—use Back to correct the source answer.
 
 ## Privacy and abuse protection
 

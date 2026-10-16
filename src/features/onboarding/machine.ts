@@ -36,7 +36,7 @@ export function sessionReducer(state: Session, event: SessionEvent): Session {
       return {
         ...state,
         phase: event.result.question
-          ? state.history.length < 3
+          ? state.history.length < 1
             ? 'INTRODUCTION'
             : 'DISCOVERY'
           : 'RESULTS',
@@ -56,7 +56,7 @@ export function sessionReducer(state: Session, event: SessionEvent): Session {
       return last
         ? {
             ...state,
-            phase: state.history.length <= 3 ? 'INTRODUCTION' : 'DISCOVERY',
+            phase: state.history.length <= 1 ? 'INTRODUCTION' : 'DISCOVERY',
             history: state.history.slice(0, -1),
             question: last.question,
             result: null,

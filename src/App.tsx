@@ -12,11 +12,10 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from './components/ui/button'
-import { InteractionRenderer } from './components/onboarding/Interactions'
+import { QuestionExperience } from './components/onboarding/QuestionExperience'
 import { Gallery } from './components/onboarding/Gallery'
 import { RecommendationCard } from './components/recommendations/RecommendationCard'
 import { assets } from './data/assets'
-import { personas } from './features/onboarding/director'
 import { initialSession, sessionReducer } from './features/onboarding/machine'
 import { ru } from './lib/i18n'
 import type { DirectorResult } from './types/session'
@@ -27,7 +26,7 @@ export default function App() {
     [liveAvailable, setLiveAvailable] = useState(false),
     [gallery, setGallery] = useState(import.meta.env.DEV && location.hash === '#gallery'),
     [privacy, setPrivacy] = useState(false),
-    [introAnswer, setIntroAnswer] = useState('')
+    [timerEnabled, setTimerEnabled] = useState(true)
   const requestId = useRef(0),
     busy = useRef(false),
     controller = useRef<AbortController | null>(null),
@@ -50,7 +49,7 @@ export default function App() {
       controller.current?.abort()
       busy.current = false
       dispatch({ type: 'RESTART' })
-      setIntroAnswer('')
+      setTimerEnabled(true)
       setRestoredAnswer('')
     }
     window.addEventListener('pagehide', clear)
@@ -60,7 +59,7 @@ export default function App() {
     requestId.current++
     controller.current?.abort()
     busy.current = false
-    setIntroAnswer('')
+    setTimerEnabled(true)
     setRestoredAnswer('')
     dispatch({ type: 'RESTART' })
   }
@@ -177,7 +176,7 @@ export default function App() {
                         может <span>для вас.</span>
                       </h1>
                       <p className="welcome-description">
-                        Несколько вопросов о вашей жизни.
+                        Несколько быстрых выборов о ваших задачах.
                         <br />
                         Инструменты, о которых вы могли не знать.
                         <br />
@@ -188,7 +187,7 @@ export default function App() {
                           Найти свои возможности
                           <ArrowRight size={18} />
                         </Button>
-                        <span>2–3 минуты · без регистрации</span>
+                        <span>1–2 минуты · без регистрации</span>
                       </div>
                       <div className="welcome-proof">
                         <span>
@@ -313,7 +312,7 @@ export default function App() {
                       {phaseLabels.map((label, i) => (
                         <span
                           key={label}
-                          className={(session.history.length < 3 ? 0 : 1) === i ? 'current' : ''}
+                          className={(session.history.length < 1 ? 0 : 1) === i ? 'current' : ''}
                         >
                           <i>{i + 1}</i>
                           <span>{label}</span>
@@ -397,7 +396,7 @@ export default function App() {
                               tabIndex={-1}
                             >
                               <span className="eyebrow">
-                                {session.history.length < 3
+                                {session.history.length < 1
                                   ? 'НАЧНЁМ СО ЗНАКОМСТВА'
                                   : 'ЧУТЬ БЛИЖЕ К ВАШИМ ОТКРЫТИЯМ'}{' '}
                                 <span className="step-counter">
@@ -407,50 +406,17 @@ export default function App() {
                               <h1>{session.question.title}</h1>
                               <p className="question-description">{session.question.description}</p>
                             </div>
-                            <InteractionRenderer
-                              key={
-                                session.question.id +
-                                (session.question.id === 'intro' ? introAnswer : '')
-                              }
+                            <QuestionExperience
+                              key={session.question.id}
                               question={session.question}
-                              initialAnswer={
-                                restoredAnswer ||
-                                (session.question.id === 'intro' ? introAnswer : '')
-                              }
+                              initialAnswer={restoredAnswer}
                               live={mode === 'live'}
+                              timerEnabled={timerEnabled}
+                              onTimerEnabledChange={setTimerEnabled}
+                              paused={privacy}
                               onSubmit={(answer) => submit(answer)}
                               onSkip={() => submit('', true)}
                             />
-                            {session.question.id === 'intro' && mode === 'demo' && (
-                              <div className="persona-section">
-                                <p className="section-kicker">
-                                  ИЛИ ПОПРОБУЙТЕ ОДИН ИЗ ДЕМО-ПРИМЕРОВ
-                                </p>
-                                <div className="persona-grid">
-                                  {personas.map((p) => {
-                                    const Icon = assets[p.assetId]
-                                    return (
-                                      <button
-                                        key={p.id}
-                                        onClick={() => {
-                                          setIntroAnswer(p.text)
-                                          setRestoredAnswer('')
-                                          dispatch({ type: 'RESTART' })
-                                          dispatch({ type: 'START' })
-                                        }}
-                                      >
-                                        <Icon size={20} />
-                                        <span>
-                                          <strong>{p.label}</strong>
-                                          <small>{p.detail}</small>
-                                        </span>
-                                        <ArrowUpRight size={14} />
-                                      </button>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            )}
                             <p className="session-privacy">
                               <ShieldCheck size={14} />
                               {mode === 'demo'

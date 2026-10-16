@@ -37,7 +37,7 @@ export function buildMemory(claims: Claim[], history: Interaction[]): Memory {
   }
   const supported = [...memory.confirmedFacts, ...memory.goals, ...memory.interests]
   for (const domain of new Set(supported.map((c) => c.domain))) {
-    const items = supported.filter((c) => c.domain === domain)
+    const items = supported.filter((c) => c.domain === domain && c.kind !== 'interest')
     if (items.some((c) => c.negative) && items.some((c) => !c.negative))
       memory.contradictions.push({ domain, sourceIds: [...new Set(items.map((c) => c.sourceId))] })
   }
@@ -63,7 +63,7 @@ const patterns: Record<Domain, RegExp> = {
   audio: /аудио|голос|запис|расшифр|audio|voice|transcri/i,
   coding: /программ|разработ|код|coding|developer|software/i,
   productivity: /рутин|повтор|админ|офис|задач|замет|организ|office|repetitive|admin|notes/i,
-  learning: /учусь|студент|учеб|изуч|универс|student|learn|university/i,
+  learning: /учусь|студент|уч[её]б|изуч|универс|student|learn|university/i,
   presentations: /презентац|слайд|presentation|slides/i,
   communication: /встреч|совещан|общени|перепис|meeting|communicat/i,
   everyday: /повседнев|обычн|быт|рецепт|путешеств|everyday|recipe|travel/i,
@@ -71,21 +71,28 @@ const patterns: Record<Domain, RegExp> = {
 export function extractDemoClaims(history: Interaction[]): Claim[] {
   const claims: Claim[] = []
   for (const h of history.filter((h) => !h.skipped)) {
-    for (const [domain, pattern] of Object.entries(patterns)) {
-      // Negation is scoped to the matching clause, rather than the entire answer.
-      const clause = h.answer.split(/[.;\n]/).find((s) => pattern.test(s))
-      if (!clause) continue
-      const match = pattern.exec(clause)!
-      const before = clause.slice(Math.max(0, match.index - 35), match.index)
-      claims.push({
-        kind: /хочу|нужно|хотел|want|need/i.test(clause) ? 'goal' : 'fact',
-        text: clause.trim().slice(0, 240),
-        quote: clause.trim().slice(0, 240),
-        sourceId: h.id,
-        domain: domain as Domain,
-        negative: /\bnot\b|\bdon't\b|не\s+(?:\S+\s+){0,2}$|без\s*$|не\s+интерес/i.test(before),
-        toolId: null,
-      })
+    // Familiarity answers contain product names, not evidence of activities or rejected needs.
+    for (const [domain, pattern] of Object.entries(
+      h.question.component === 'AppRecognition' ? {} : patterns,
+    )) {
+      // A swipe reaction describes an interest, not a universal rejection of an entire subject.
+      for (const clause of h.answer.split(/[.;\n]/).filter((s) => pattern.test(s))) {
+        const match = pattern.exec(clause)!
+        const before = clause.slice(Math.max(0, match.index - 35), match.index)
+        claims.push({
+          kind: /^(?:Не )?Интересно:/i.test(clause.trim())
+            ? 'interest'
+            : /хочу|нужно|хотел|want|need/i.test(clause)
+              ? 'goal'
+              : 'fact',
+          text: clause.trim().slice(0, 240),
+          quote: clause.trim().slice(0, 240),
+          sourceId: h.id,
+          domain: domain as Domain,
+          negative: /\bnot\b|\bdon't\b|не\s+(?:\S+\s+){0,2}$|без\s*$|не\s+интерес/i.test(before),
+          toolId: null,
+        })
+      }
     }
     for (const name of ['Excel', 'Google Sheets', 'PowerPoint']) {
       if (h.answer.includes(name) && /работаю|использую|use|work/i.test(h.answer))

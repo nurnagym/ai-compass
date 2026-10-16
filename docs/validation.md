@@ -1,18 +1,24 @@
 # Validation evidence
 
-Validated in this cloud workspace on 2026-10-16 with Node 24.19.0, npm 11.9.0 and the project dependency lockfile. The repository started empty; all application files were created for this build. No deployment, Git push, or environment publication was performed.
+Validated in this cloud workspace on 2026-10-16 with Node 24.19.0, npm 11.9.0 and the project dependency lockfile. The repository started empty; all application files were created for this build. These checks do not deploy to Cloudflare or publish an environment snapshot. GitHub source updates are tracked separately through commits.
+
+## Quick-answer update
+
+The three mandatory open questions were replaced with one-tap activity cards and short adaptive choices/scenarios. A swipe interaction appears by the third question. All four standard HTTP journeys now finish in 4–5 interactions with 3–4 formats and no mandatory typing. Optional text/voice remains available.
+
+The 20-second answer timebox can be extended or disabled. Tests cover expiry preserving drafts without submission/skip, disabling across questions, fresh question/swipe budgets, tab/privacy/recording pauses, editable text after switching formats, and application-owned IDs even if a model repeats one. Backend regressions check that product unfamiliarity does not fabricate activity/negative evidence, specific swipe dislikes do not create blanket contradictions, concrete follow-up answers change the next question, and diversity does not permanently discard a stronger recommendation.
 
 ## Passed
 
 - `npm ci --no-audit --no-fund`: fresh frozen dependency installation completed successfully using a writable npm cache.
-- `npm run test`: **46 passing tests** in three suites. Includes source-quote validation, goals versus hypotheses, contradictory evidence, candidate ranking, explicit constraints, familiarity, budget enforcement, four demo personas, vague/skipped answers, invalid model schemas, corrections/restart, duplicate submission guards and recoverable errors.
+- `npm run test`: **66 passing tests** in five suites. Includes source-quote validation, goals versus hypotheses, contradictory evidence, candidate ranking, explicit constraints, familiarity, budget enforcement, four demo personas, vague/skipped answers, invalid model schemas, corrections/restart, duplicate submission guards and recoverable errors.
 - UI tests cover all six interaction types plus recommendation links/feedback. Microphone-denial and simulated recording-to-editable-transcript behavior passed. Audio fixtures and provider responses are mocked; this does not prove actual transcription quality.
 - Worker tests cover input/body bounds, malformed JSON, unknown UI, source validation, origin checks, paid-call kill switch, native limiter contract, missing-binding fail-closed behavior, provider errors and multipart/MIME handling. Responses structured parsing and transcription calls use a mocked OpenAI client.
-- `npm run test:e2e` with system Chromium: **16 passing desktop/mobile tests**. Includes all four personas, complete student/creative journeys, edit/back, restart, skipped/vague answers, network error recovery, gallery and automated WCAG A/AA checks. Automated accessibility scans passed on the welcome screen, six components and representative results. These do not replace manual assistive-technology testing.
+- `npm run test:e2e` with system Chromium: **20 passing desktop/mobile tests**. Includes all four personas using real quick selections, early swipes, edit/back, restart, skipped answers, optional text, network error recovery, timer extension/disabling/expiry with draft preservation, gallery and automated WCAG A/AA checks. Automated accessibility scans passed on the welcome screen, six components and representative results. These do not replace manual assistive-technology testing.
 - `npm run lint`: no warnings or errors.
 - `npm run format:check`: all checked source/configuration files conform.
-- `npm run build`: strict frontend and Worker TypeScript plus production Vite builds pass. Client JS approximately 469 KB / 145 KB gzip; Worker uncompressed bundle approximately 1.26 MB. Rollup reports harmless annotation-position warnings in Zod's dependency source; no verification or checks were disabled.
-- `npm run smoke` against the actual development Worker: student 4 steps, creative 6, office 4, everyday 4, all-skipped 5. Each ends with 3 catalog-backed results; skipped answers produce only exploratory suggestions. Evidence quotes are checked against submitted answers.
+- `npm run build`: strict frontend and Worker TypeScript plus production Vite builds pass. Client JS approximately 471 KB / 146 KB gzip; Worker uncompressed bundle approximately 1.26 MB. Rollup reports harmless annotation-position warnings in Zod's dependency source; no verification or checks were disabled.
+- `npm run smoke` against the actual development Worker: student 4 steps, creative 5, office 4, everyday 4, all-skipped 5. Each ends with 3 catalog-backed results; skipped answers produce only exploratory suggestions. Evidence quotes are checked against submitted answers.
 - The same five HTTP scenarios passed against the built production preview on a separate port.
 - Production Chromium inspection: desktop/mobile load without JavaScript page errors or horizontal overflow, and the gallery is excluded. Static response security headers are supplied by `public/_headers`.
 

@@ -25,7 +25,13 @@ describe('fixed component library', () => {
   it('ChoiceCards requires selection and emits allowlisted labels', async () => {
     const user = userEvent.setup(),
       submit = vi.fn()
-    render(<ChoiceCards question={question} onSubmit={submit} onSkip={() => {}} />)
+    render(
+      <ChoiceCards
+        question={{ ...question, multiple: true }}
+        onSubmit={submit}
+        onSkip={() => {}}
+      />,
+    )
     expect(screen.getByRole('button', { name: 'Продолжить' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: /Исследовать документы/ }))
     expect(screen.getByRole('button', { name: /Исследовать документы/ })).toHaveAttribute(
@@ -34,6 +40,13 @@ describe('fixed component library', () => {
     )
     await user.click(screen.getByRole('button', { name: 'Продолжить' }))
     expect(submit).toHaveBeenCalledWith('Исследовать документы')
+  })
+  it('single ChoiceCards submits immediately without a Continue step', async () => {
+    const submit = vi.fn()
+    render(<ChoiceCards question={question} onSubmit={submit} onSkip={() => {}} />)
+    expect(screen.queryByRole('button', { name: 'Продолжить' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Исследовать документы/ }))
+    expect(submit).toHaveBeenCalledExactlyOnceWith('Исследовать документы')
   })
   it('ThisOrThat submits a single tap', async () => {
     const submit = vi.fn()

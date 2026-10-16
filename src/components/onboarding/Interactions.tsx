@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
 import { ArrowRight, Check, Mic, Square, X, ThumbsUp, ThumbsDown } from 'lucide-react'
 import { Button } from '../ui/button'
@@ -12,6 +12,9 @@ export interface InteractionProps {
   onSkip: () => void
   initialAnswer?: string
   live?: boolean
+  onBusyChange?: (busy: boolean) => void
+  onDraftChange?: (text: string) => void
+  onProgress?: () => void
 }
 export function VoiceTextQuestion({
   question,
@@ -19,6 +22,8 @@ export function VoiceTextQuestion({
   onSkip,
   initialAnswer = '',
   live = false,
+  onBusyChange,
+  onDraftChange,
 }: InteractionProps) {
   const [text, setText] = useState(initialAnswer),
     [transcript, setTranscript] = useState(false)
@@ -27,6 +32,13 @@ export function VoiceTextQuestion({
     setTranscript(true)
   }, live)
   const busy = voice.status !== 'idle'
+  useEffect(() => {
+    onBusyChange?.(busy)
+    return () => onBusyChange?.(false)
+  }, [busy, onBusyChange])
+  useEffect(() => {
+    onDraftChange?.(text)
+  }, [text, onDraftChange])
   return (
     <div className="voice-question">
       <div className="answer-box">
@@ -38,8 +50,8 @@ export function VoiceTextQuestion({
           maxLength={1800}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Например: учусь, работаю с документами, люблю фотографировать…"
-          rows={5}
+          placeholder="Например: хочу быстрее разбираться в документах"
+          rows={3}
           disabled={busy}
         />
         <div className="answer-tools">
@@ -100,13 +112,21 @@ export function VoiceTextQuestion({
 export function ChoiceCards({ question, onSubmit, onSkip }: InteractionProps) {
   const [selected, setSelected] = useState<string[]>([])
   function toggle(id: string) {
+    if (!question.multiple) {
+      onSubmit(question.options.find((option) => option.id === id)!.label)
+      return
+    }
     setSelected((prev) =>
       question.multiple ? (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]) : [id],
     )
   }
   return (
     <div>
-      <div className="choice-grid" role="group" aria-label={question.title}>
+      <div
+        className={`choice-grid ${question.id === 'intro' ? 'entry-choices' : ''}`}
+        role="group"
+        aria-label={question.title}
+      >
         {question.options.map((o) => {
           const Icon = assets[o.assetId],
             active = selected.includes(o.id)
@@ -116,7 +136,7 @@ export function ChoiceCards({ question, onSubmit, onSkip }: InteractionProps) {
               type="button"
               whileTap={{ scale: 0.98 }}
               className={`choice-card ${active ? 'selected' : ''}`}
-              aria-pressed={active}
+              aria-pressed={question.multiple ? active : undefined}
               onClick={() => toggle(o.id)}
             >
               <span className="asset-tile">
@@ -126,26 +146,30 @@ export function ChoiceCards({ question, onSubmit, onSkip }: InteractionProps) {
                 <strong>{o.label}</strong>
                 {o.description && <small>{o.description}</small>}
               </span>
-              <span className="check-circle">{active && <Check size={14} />}</span>
+              <span className="check-circle">
+                {question.multiple ? active && <Check size={14} /> : <ArrowRight size={14} />}
+              </span>
             </motion.button>
           )
         })}
       </div>
       <div className="question-actions">
-        <Button
-          disabled={!selected.length}
-          onClick={() =>
-            onSubmit(
-              question.options
-                .filter((o) => selected.includes(o.id))
-                .map((o) => o.label)
-                .join('; '),
-            )
-          }
-        >
-          {ru.continue}
-          <ArrowRight size={17} />
-        </Button>
+        {question.multiple && (
+          <Button
+            disabled={!selected.length}
+            onClick={() =>
+              onSubmit(
+                question.options
+                  .filter((o) => selected.includes(o.id))
+                  .map((o) => o.label)
+                  .join('; '),
+              )
+            }
+          >
+            {ru.continue}
+            <ArrowRight size={17} />
+          </Button>
+        )}
         <Button variant="ghost" onClick={onSkip}>
           {ru.skip}
         </Button>
@@ -183,7 +207,7 @@ export function ThisOrThat({ question, onSubmit, onSkip }: InteractionProps) {
     </div>
   )
 }
-export function SwipeCards({ question, onSubmit, onSkip }: InteractionProps) {
+export function SwipeCards({ question, onSubmit, onSkip, onProgress }: InteractionProps) {
   const [index, setIndex] = useState(0),
     [answers, setAnswers] = useState<string[]>([])
   const current = question.options[index],
@@ -194,6 +218,7 @@ export function SwipeCards({ question, onSubmit, onSkip }: InteractionProps) {
     else {
       setAnswers(next)
       setIndex(index + 1)
+      onProgress?.()
     }
   }
   return (
