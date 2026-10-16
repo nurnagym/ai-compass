@@ -45,13 +45,14 @@ Edit **only the ignored `.dev.vars`** file:
 ```dotenv
 AI_ENABLED=true
 COMPASS_API_KEY=your-key-entered-locally
-AI_MODEL=gpt-6.1
+AI_MODEL=gpt-6.1-sol
+AI_REASONING_EFFORT=low
 TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
 ```
 
 Restart the development server, then choose **Включить AI** on the welcome screen. The key is never included in the browser bundle. `OPENAI_API_KEY` is also accepted by the Worker for conventional deployments, but `COMPASS_API_KEY` avoids reserved names in cloud environment secret bindings. Do not prefix secrets with `VITE_`, commit them, or paste them into chat.
 
-Live questions use OpenAI **Responses API + Structured Outputs** with server-side Zod validation, `store: false`, a 25-second request timeout, zero automatic retries, and a 2,200-token response limit. `gpt-6.1` is the requested default; model availability, current pricing, and a successful real Responses request must be confirmed in your OpenAI project. No authenticated GPT-6.1 call has been validated in this workspace.
+Live questions use OpenAI **Responses API + Structured Outputs** with server-side Zod validation, `store: false`, a 25-second request timeout, zero automatic retries, and an 8,000-token response limit (it includes hidden reasoning tokens; `AI_REASONING_EFFORT=low` keeps them small — leave it empty for models without reasoning). `gpt-6.1-sol` is the default (the API has no model named plain `gpt-6.1`); model availability, current pricing, and a successful real Responses request must be confirmed in your OpenAI project. No authenticated GPT-6.1 Sol call has been validated in this workspace.
 
 Live API failures return an allowlisted `errorCode`, and the onboarding screen shows its corresponding Russian explanation: unavailable model, rejected key, access denied, exhausted quota, temporary rate limit, rejected request parameters, timeout or invalid/incomplete response. Raw provider error text, input and credentials are never returned or logged. A provider failure keeps the current answer and AI mode; the app does not silently switch to demo or retry paid calls. `/api/status` reports configuration only and does not contact OpenAI or establish model access.
 
