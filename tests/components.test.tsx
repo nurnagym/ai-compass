@@ -68,6 +68,17 @@ describe('fixed component library', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Продолжить' }))
     expect(submit).toHaveBeenCalledWith('Моя задача')
   })
+  it('makes only the introduction required and allows skipping later open questions', () => {
+    const props = { onSubmit: () => {}, onSkip: () => {} }
+    const view = render(<VoiceTextQuestion question={introduction} {...props} />)
+    expect(screen.getByRole('textbox')).toBeRequired()
+    expect(screen.queryByRole('button', { name: 'Пропустить' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '   ' } })
+    expect(screen.getByRole('button', { name: 'Продолжить' })).toBeDisabled()
+    view.rerender(<VoiceTextQuestion question={{ ...introduction, id: 'follow-up' }} {...props} />)
+    expect(screen.getByRole('textbox')).not.toBeRequired()
+    expect(screen.getByRole('button', { name: 'Пропустить' })).toBeEnabled()
+  })
   it('handles microphone denial without disabling text', async () => {
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,

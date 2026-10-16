@@ -3,9 +3,13 @@ import { expect, test, type Page, type Locator } from '@playwright/test'
 async function start(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Найти свои возможности' }).click()
-  await expect(page.getByRole('heading', { name: 'С чего начнём?' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Какую задачу вы хотели бы упростить?' }),
+  ).toBeVisible()
   await expect(page.getByRole('timer')).toBeVisible()
-  await expect(page.getByRole('textbox')).toHaveCount(0)
+  await expect(page.getByRole('textbox')).toHaveJSProperty('required', true)
+  await expect(page.getByRole('button', { name: 'Пропустить', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Продолжить', exact: true })).toBeDisabled()
 }
 async function select(page: Page, button: Locator) {
   const id = await page.locator('[data-question-id]').getAttribute('data-question-id')
@@ -57,9 +61,11 @@ async function finish(page: Page) {
   }
   await expect(page.getByRole('heading', { name: 'Ваши AI-открытия.' })).toBeVisible()
 }
-test('student can finish with choices and early swipes, without typing', async ({ page }) => {
+test('student starts with a required open answer, then gets choices and swipes', async ({
+  page,
+}) => {
   await start(page)
-  await advance(page, 'Учёба и исследования Статьи, документы, новые знания')
+  await write(page, 'Хочу быстрее разбираться в исследовательских статьях и документах')
   await expect(page.locator('.scenario-options')).toBeVisible()
   await select(page, page.getByRole('button', { name: /Быстро понять документ/ }))
   await expect(page.locator('.swipe-card')).toBeVisible()
@@ -81,18 +87,21 @@ test('student can finish with choices and early swipes, without typing', async (
 })
 test('creative choices change the follow-up; Back allows a correction', async ({ page }) => {
   await start(page)
-  await advance(page, 'Фотографии и видео Создавать и обрабатывать')
+  await write(page, 'Хочу улучшать фотографии и видео')
   await expect(page.locator('.comparison')).toBeVisible()
   await page.getByRole('button', { name: 'Назад', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'С чего начнём?' })).toBeVisible()
-  await advance(page, 'Фотографии и видео Создавать и обрабатывать')
+  await expect(page.getByRole('textbox')).toHaveValue('Хочу улучшать фотографии и видео')
+  await write(page, 'Хочу улучшать фотографии')
   await select(page, page.getByRole('button', { name: /Улучшать фотографии/ }))
   await finish(page)
   await expect(page.getByRole('heading', { name: 'Upscayl', exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
-test('fully skipped answers terminate with honest exploratory results', async ({ page }) => {
+test('a vague required introduction and skipped follow-ups terminate honestly', async ({
+  page,
+}) => {
   await start(page)
+  await write(page, 'Пока не знаю')
   for (
     let i = 0;
     i < 7 && !(await page.getByRole('heading', { name: 'Ваши AI-открытия.' }).isVisible());
@@ -102,7 +111,9 @@ test('fully skipped answers terminate with honest exploratory results', async ({
   await expect(page.getByRole('heading', { name: 'Ваши AI-открытия.' })).toBeVisible()
   await expect(page.locator('.fit-label').first()).toHaveText('Идея для пробы')
 })
-test('text stays optional and an API failure is recoverable', async ({ page }) => {
+test('required open introduction survives an API failure and can be corrected', async ({
+  page,
+}) => {
   await start(page)
   await page.route('**/api/onboarding/next', (r) => r.fulfill({ status: 502, body: '{}' }))
   await write(page, 'Читаю документы')
@@ -121,7 +132,7 @@ test('time limits can be extended, disabled and stay disabled across questions',
   await expect(page.getByRole('timer')).toHaveText(/00:(?:3\d|40)/)
   await page.getByRole('button', { name: 'Без таймера', exact: true }).click()
   await expect(page.getByRole('timer')).toHaveCount(0)
-  await advance(page, 'Повседневные дела Писать, планировать, разбираться в новом')
+  await write(page, 'Хочу писать тексты проще')
   await expect(page.getByText('В своём темпе')).toBeVisible()
   await expect(page.getByRole('timer')).toHaveCount(0)
   await page.getByRole('button', { name: 'Включить таймер' }).click()
@@ -130,7 +141,6 @@ test('time limits can be extended, disabled and stay disabled across questions',
 test('expiry keeps a written draft and permits continuing without a deadline', async ({ page }) => {
   await page.clock.install()
   await start(page)
-  await page.getByRole('button', { name: 'Ответить своими словами' }).click()
   await page.getByRole('textbox').fill('Мой короткий ответ')
   await page.clock.runFor(21000)
   await expect(page.locator('.timer-nudge')).toBeVisible()
@@ -159,12 +169,12 @@ test('gallery previews all six interactions without AI requests', async ({ page 
   expect(calls).toBe(0)
 })
 for (const [name, choice] of [
-  ['office', 'Работа и рутина Документы, встречи, повторяющиеся дела'],
-  ['everyday', 'Повседневные дела Писать, планировать, разбираться в новом'],
+  ['office', 'Хочу расшифровывать записи встреч и разбираться с документами'],
+  ['everyday', 'Хочу писать тексты для повседневной жизни'],
 ]) {
   test(`${name} persona completes using only quick interactions`, async ({ page }) => {
     await start(page)
-    await advance(page, choice)
+    await write(page, choice)
     await finish(page)
     await expect(page.locator('.recommendation-card').first()).toBeVisible()
   })

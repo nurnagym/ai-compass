@@ -31,6 +31,7 @@ export function VoiceTextQuestion({
     setText(t)
     setTranscript(true)
   }, live)
+  const required = question.id === 'intro'
   const busy = voice.status !== 'idle'
   useEffect(() => {
     onBusyChange?.(busy)
@@ -48,6 +49,7 @@ export function VoiceTextQuestion({
         <textarea
           id="answer"
           maxLength={1800}
+          required={required}
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Например: хочу быстрее разбираться в документах"
@@ -97,13 +99,15 @@ export function VoiceTextQuestion({
           {ru.continue}
           <ArrowRight size={17} />
         </Button>
-        <Button variant="ghost" onClick={onSkip} disabled={busy}>
-          {ru.skip}
-        </Button>
+        {!required && (
+          <Button variant="ghost" onClick={onSkip} disabled={busy}>
+            {ru.skip}
+          </Button>
+        )}
       </div>
       <p className="helper">
         {question.targetGap === 'introduction'
-          ? 'Не нужно рассказывать всё. Начнём с того, что важно вам.'
+          ? 'Одной фразы достаточно. Этот ответ нужен, чтобы подобрать следующие вопросы.'
           : 'Можно ответить коротко — или пропустить.'}
       </p>
     </div>
@@ -122,11 +126,7 @@ export function ChoiceCards({ question, onSubmit, onSkip }: InteractionProps) {
   }
   return (
     <div>
-      <div
-        className={`choice-grid ${question.id === 'intro' ? 'entry-choices' : ''}`}
-        role="group"
-        aria-label={question.title}
-      >
+      <div className="choice-grid" role="group" aria-label={question.title}>
         {question.options.map((o) => {
           const Icon = assets[o.assetId],
             active = selected.includes(o.id)

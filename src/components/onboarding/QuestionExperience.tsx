@@ -35,8 +35,8 @@ export function QuestionExperience({
               : timer.paused
                 ? 'Таймер на паузе'
                 : timer.expired
-                  ? 'Можно выбрать первое, что ближе'
-                  : `${ANSWER_SECONDS} секунд на первый выбор`}
+                  ? 'Одного короткого ответа достаточно'
+                  : `${ANSWER_SECONDS} секунд на ${props.question.component === 'VoiceTextQuestion' || writeOwn ? 'короткий ответ' : 'выбор'}`}
           </span>
         </div>
         {timerEnabled && (

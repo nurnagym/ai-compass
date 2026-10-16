@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { decide, demoNext, introduction } from '../src/features/onboarding/director'
+import { decide, demoNext, introduction, personas } from '../src/features/onboarding/director'
 import { buildMemory, extractDemoClaims } from '../src/features/onboarding/memory'
 import { rankTools } from '../src/features/evidence/evaluator'
 import type { Interaction, Question } from '../src/types/session'
 function selectedAnswer(question: Question, persona: string): string {
-  if (question.id === 'intro') return question.options.find((o) => o.id === persona)!.label
+  if (question.id === 'intro') return personas.find((p) => p.id === persona)!.text
   if (question.targetGap === 'constraints')
     return question.options.find((o) => o.id === 'desktop')!.label
   if (question.component === 'SwipeCards')
@@ -37,7 +37,8 @@ describe('quick adaptive journey policy', () => {
       expect(history.length).toBeLessThanOrEqual(7)
       expect(history.slice(0, 3).some((h) => h.question.component === 'SwipeCards')).toBe(true)
       expect(new Set(history.map((h) => h.question.component)).size).toBeGreaterThanOrEqual(3)
-      expect(history.every((h) => h.question.component !== 'VoiceTextQuestion')).toBe(true)
+      expect(history[0].question.component).toBe('VoiceTextQuestion')
+      expect(history.slice(1).every((h) => h.question.component !== 'VoiceTextQuestion')).toBe(true)
       expect(history.some((h) => h.question.targetGap === 'constraints')).toBe(true)
     },
   )
@@ -87,7 +88,10 @@ describe('quick adaptive journey policy', () => {
       ...introduction,
       component: 'ThisOrThat',
       title: 'Что полезнее сейчас?',
-      options: introduction.options.slice(0, 2),
+      options: [
+        { id: 'a', label: 'Документы', description: '', assetId: 'research' },
+        { id: 'b', label: 'Тексты', description: '', assetId: 'writing' },
+      ],
       targetGap: 'research',
     }
     expect(
@@ -95,12 +99,17 @@ describe('quick adaptive journey policy', () => {
         .question?.id,
     ).toBe('question-2')
   })
-  it('does not repeat a skipped constraint question or loop on an all-skipped journey', () => {
+  it('does not repeat skipped constraints after a vague required introduction', () => {
     let question = introduction
     const history: Interaction[] = []
     let result
     for (let i = 0; i < 7; i++) {
-      history.push({ id: `step-${i + 1}`, question, answer: '', skipped: true })
+      history.push({
+        id: `step-${i + 1}`,
+        question,
+        answer: i === 0 ? 'Не знаю' : '',
+        skipped: i > 0,
+      })
       result = demoNext(history)
       if (!result.question) break
       question = result.question
@@ -138,6 +147,43 @@ describe('quick adaptive journey policy', () => {
       decide(history, extractDemoClaims(history), { action: 'ASK', question: voice }, 'live')
         .question?.component,
     ).toBe('SwipeCards')
+  })
+  it('lets the live director choose a focused open clarification after interactive steps', () => {
+    const history: Interaction[] = [
+      { id: 'step-1', question: introduction, answer: 'Исследую документы', skipped: false },
+      {
+        id: 'step-2',
+        question: { ...introduction, id: 'q2', component: 'ScenarioGame', targetGap: 'research' },
+        answer: 'Читаю документы',
+        skipped: false,
+      },
+      {
+        id: 'step-3',
+        question: { ...introduction, id: 'q3', component: 'SwipeCards', targetGap: 'research' },
+        answer: 'Интересно: Документы',
+        skipped: false,
+      },
+      {
+        id: 'step-4',
+        question: { ...introduction, id: 'q4', component: 'ChoiceCards', targetGap: 'constraints' },
+        answer: 'Могу установить приложение',
+        skipped: false,
+      },
+    ]
+    const clarification: Question = {
+      ...introduction,
+      id: 'clarify',
+      title: 'Какой формат документов: PDF или таблицы?',
+      targetGap: 'research',
+    }
+    const result = decide(
+      history,
+      extractDemoClaims(history.slice(0, 1)),
+      { action: 'CLARIFY', question: clarification },
+      'live',
+    )
+    expect(result.question?.component).toBe('VoiceTextQuestion')
+    expect(result.question?.title).toBe(clarification.title)
   })
   it('keeps rejecting a particular swipe separate from a blanket factual contradiction', () => {
     const history: Interaction[] = [

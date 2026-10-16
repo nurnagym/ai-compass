@@ -5,28 +5,39 @@ const origin = process.env.COMPASS_TEST_ORIGIN || 'http://127.0.0.1:5173'
 assert.equal((await fetch(`${origin}/api/status`).then((r) => r.json())).demo, true)
 const intro = {
   id: 'intro',
-  component: 'ChoiceCards',
-  title: 'С чего начнём?',
+  component: 'VoiceTextQuestion',
+  title: 'Какую задачу вы хотели бы упростить?',
   description: 'Что сейчас вам ближе?',
-  options: [
-    { id: 'student', label: 'Учёба и исследования', description: '', assetId: 'education' },
-    { id: 'creative', label: 'Фотографии и видео', description: '', assetId: 'creativity' },
-    { id: 'office', label: 'Работа и рутина', description: '', assetId: 'productivity' },
-    { id: 'everyday', label: 'Повседневные дела', description: '', assetId: 'everyday' },
-  ],
+  options: [],
   multiple: false,
   targetGap: 'introduction',
 }
+const rejected = await fetch(`${origin}/api/onboarding/next`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    mode: 'demo',
+    history: [{ id: 'step-1', question: intro, answer: '', skipped: true }],
+  }),
+})
+assert.equal(rejected.status, 400)
 for (const name of ['student', 'creative', 'office', 'everyday', 'skipped']) {
   const history = []
   let question = intro,
     result
   for (let step = 0; step < 7; step++) {
+    const intros = {
+      student: 'Хочу разбираться в исследовательских статьях и документах',
+      creative: 'Хочу улучшать фотографии и видео',
+      office: 'Хочу расшифровывать записи встреч и разбираться с документами',
+      everyday: 'Хочу писать тексты для повседневной жизни',
+      skipped: 'Пока не знаю',
+    }
     const answer =
-      name === 'skipped'
-        ? ''
-        : question.id === 'intro'
-          ? question.options.find((o) => o.id === name).label
+      step === 0
+        ? intros[name]
+        : name === 'skipped'
+          ? ''
           : question.targetGap === 'constraints'
             ? question.options.find((o) => o.id === 'desktop').label
             : question.component === 'SwipeCards'
@@ -49,7 +60,8 @@ for (const name of ['student', 'creative', 'office', 'everyday', 'skipped']) {
   assert.equal(result.question, null)
   assert.ok(result.recommendations.length <= 3)
   assert.ok(history.slice(0, 3).some((h) => h.question.component === 'SwipeCards'))
-  assert.ok(history.every((h) => h.question.component !== 'VoiceTextQuestion'))
+  assert.equal(history[0].question.component, 'VoiceTextQuestion')
+  assert.ok(history.slice(1).every((h) => h.question.component !== 'VoiceTextQuestion'))
   assert.ok(new Set(history.map((h) => h.question.component)).size >= 3)
   for (const r of result.recommendations) {
     assert.ok(tools.some((t) => t.id === r.toolId && t.verificationStatus === 'verified'))
@@ -57,6 +69,6 @@ for (const name of ['student', 'creative', 'office', 'everyday', 'skipped']) {
     if (name === 'skipped') assert.equal(r.exploratory, true)
   }
   console.log(
-    `${name}: ${history.length} steps, ${new Set(history.map((h) => h.question.component)).size} formats, ${result.recommendations.length} discoveries; early swipes, no required typing`,
+    `${name}: ${history.length} steps, ${new Set(history.map((h) => h.question.component)).size} formats, ${result.recommendations.length} discoveries; required open intro, then adaptive interactions`,
   )
 }

@@ -108,7 +108,12 @@ export default function App() {
     }
   }
   function submit(answer: string, skipped = false) {
-    if (busy.current || session.phase === 'EVALUATING') return
+    if (
+      busy.current ||
+      session.phase === 'EVALUATING' ||
+      (session.question.id === 'intro' && skipped)
+    )
+      return
     const interaction = {
       id: `step-${session.history.length + 1}`,
       question: session.question,
@@ -176,7 +181,7 @@ export default function App() {
                         может <span>для вас.</span>
                       </h1>
                       <p className="welcome-description">
-                        Несколько быстрых выборов о ваших задачах.
+                        Одна фраза о вашей задаче.
                         <br />
                         Инструменты, о которых вы могли не знать.
                         <br />

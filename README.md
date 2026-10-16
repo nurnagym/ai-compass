@@ -1,6 +1,6 @@
 # AI Compass
 
-A Russian-first, session-only AI discovery experience. A few quick choices become up to three useful tool discoveries, each with evidence, a practical first action, and an official product link. No accounts, database, or saved personal profile.
+A Russian-first, session-only AI discovery experience. A short open introduction and adaptive interactions become up to three useful tool discoveries, each with evidence, a practical first action, and an official product link. No accounts, database, or saved personal profile.
 
 ## Start locally
 
@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open the address printed by Vite in your own browser. Demo mode is the default: it needs no API key and makes no paid API calls. Start by choosing one of four activity cards. Every subsequent question offers ready-made answers; text and voice are optional through «Ответить своими словами». Demo responses use keyword-based simulation, **not a real AI director**. Answers are sent to the same-origin Worker for in-memory processing, not to OpenAI. The development-only component gallery is available using the footer or `/#gallery`; it is excluded from production.
+Open the address printed by Vite in your own browser. Demo mode is the default: it needs no API key and makes no paid API calls. Start with one required open answer about a task you want to simplify. After that, the director selects relevant interaction formats; ready-made choices and optional text/voice remain available. Demo responses use keyword-based simulation, **not a real AI director**. Answers are sent to the same-origin Worker for in-memory processing, not to OpenAI. The development-only component gallery is available using the footer or `/#gallery`; it is excluded from production.
 
 In the restricted cloud workspace, use writable tool paths:
 
@@ -22,17 +22,17 @@ npm ci
 npm run dev -- --port 5173
 ```
 
-## Quick answers and visible interaction variety
+## One open introduction, then the adaptive engine
 
-The previous three mandatory open questions are removed. The default journey starts with one-tap activity cards. The next question narrows the need using This-or-That or a short scenario, then a relevant swipe interaction appears by the third question. Installation constraints are checked before the first possible completion at four interactions. Tool recognition and additional scenarios appear only when more information is useful. The journey remains bounded at seven; it does not force every person through all six components.
+The first question is always **VoiceTextQuestion**: «Какую задачу вы хотели бы упростить?» One short phrase is enough. This first answer is required: Continue is disabled for empty/whitespace input, there is no Skip action, and both the session state machine and backend reject a skipped or non-open introduction. No director request is made until the user submits that answer. With transcription configured, users can record and edit their first answer before submitting it.
 
-Single-selection cards advance immediately. Multiple-selection cards still require Continue. Users may switch to an editable short text/voice answer and back to choices; the draft survives that switch. These answers still have source provenance and go through the same evidence evaluation.
+After the introduction, the engine chooses relevant questions and formats based on that answer. Demo mode uses curated rules; live mode uses the existing OpenAI Responses integration. Both retain safeguards against long interviews and consecutive open questions, introduce swipes early, check practical constraints, and terminate within seven interactions. The live director can select all six component types, including one additional short open clarification when useful. It does not return to three mandatory open questions. Back/restart always restore the same required open introduction.
 
-Each question has a **20-second timebox**, configurable through `ANSWER_SECONDS` in `src/hooks/useAnswerTimer.ts`. Users can add 20 seconds or disable time limits for the current session. It pauses when the tab is hidden, the privacy dialog is open, or microphone permission/recording/transcription is in progress; each new swipe card gets a fresh budget. Expiry shows a gentle prompt and preserves the draft; it does not submit an unconfirmed answer or silently skip a question. Restart resets the session and timer preference.
+Single-selection cards advance immediately. Multiple-selection cards still require Continue. On closed questions users can switch to editable text/voice and back to choices without losing their draft. Every actual answer retains evidence provenance; unselected options are never evidence.
 
-In demo mode the server extracts explicit keywords from chosen labels (or optional text), updates evidence, and selects from curated question content according to current needs and used formats. This is **deterministic simulation, not AI**. Unselected options are not evidence. Recognizing a product name does not imply using it or needing its category; a rejected swipe is a specific preference rather than a blanket contradiction of every activity in that domain.
+Each question has a **20-second timebox**, configurable through `ANSWER_SECONDS` in `src/hooks/useAnswerTimer.ts`. Users can add 20 seconds or disable time limits for the session. It pauses for hidden tabs, the privacy dialog, microphone permission, recording and transcription. New swipe cards receive a fresh budget. Expiry preserves the answer and shows a gentle prompt; it never submits an unconfirmed answer or skips the mandatory introduction.
 
-In live mode the existing OpenAI integration proposes the next question/content through Structured Outputs. The same application guardrails prevent mandatory essays, introduce swipes early, check constraints, enforce budgets and independently decide readiness. A key plus `AI_ENABLED=true` is required to activate live calls. This update does not enable paid calls.
+In demo mode the server extracts explicit keywords from the opening text and later choices, updates evidence, and selects curated questions. This is **deterministic simulation, not AI**. Product unfamiliarity does not imply use or rejection of that product's whole category. In live mode a key plus `AI_ENABLED=true` activates model-selected content through Structured Outputs. This change does not configure a key or enable paid calls.
 
 ## Enable the real AI director and voice
 
@@ -71,6 +71,8 @@ If Chromium is already provided by the machine, skip the download:
 ```bash
 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e
 ```
+
+For a different local test port, set `COMPASS_TEST_ORIGIN=http://127.0.0.1:5178` for both the browser tests and smoke command. The browser runner starts that port with strict port checking, so it cannot silently test a different server.
 
 Test provider calls are mocked. A passing API contract test does not demonstrate a real paid API call, actual speech recognition quality, or a successful Cloudflare deployment. See [validation notes](docs/validation.md) for current evidence and limitations.
 

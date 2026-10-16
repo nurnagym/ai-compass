@@ -24,15 +24,10 @@ const option = (
 })
 export const introduction: Question = {
   id: 'intro',
-  component: 'ChoiceCards',
-  title: 'С чего начнём?',
-  description: 'Что сейчас вам ближе? Один выбор — и пойдём дальше.',
-  options: [
-    option('student', 'Учёба и исследования', 'education', 'Статьи, документы, новые знания'),
-    option('creative', 'Фотографии и видео', 'creativity', 'Создавать и обрабатывать'),
-    option('office', 'Работа и рутина', 'productivity', 'Документы, встречи, повторяющиеся дела'),
-    option('everyday', 'Повседневные дела', 'everyday', 'Писать, планировать, разбираться в новом'),
-  ],
+  component: 'VoiceTextQuestion',
+  title: 'Какую задачу вы хотели бы упростить?',
+  description: 'Один пример из работы, учёбы или повседневной жизни. Достаточно одной фразы.',
+  options: [],
   multiple: false,
   targetGap: 'introduction',
 }
@@ -265,10 +260,13 @@ export function decide(
   const repeatedQuestion = proposed && history.some((h) => h.question.title === proposed.title)
   const usableProposal =
     proposed &&
-    proposed.component !== 'VoiceTextQuestion' &&
+    !(
+      proposed.component === 'VoiceTextQuestion' &&
+      history.filter((h) => h.question.component === 'VoiceTextQuestion').length >= 2
+    ) &&
     !repeatedQuestion &&
     proposed.component !== history.at(-1)?.question.component
-  // Format guardrails apply equally to demo and live: no mandatory essays, early swipes, practical constraints.
+  // After the required open introduction, the director selects a format; avoid consecutive open questions and long interviews.
   let next = usableProposal ? proposed : fallback
   if (history.length >= 2 && !seenSwipe && next.component !== 'SwipeCards') next = fallback
   if (history.length >= 3 && seenSwipe && !hasConstraints && next.targetGap !== 'constraints')

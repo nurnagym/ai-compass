@@ -22,6 +22,7 @@ export function sessionReducer(state: Session, event: SessionEvent): Session {
       if (
         !['INTRODUCTION', 'DISCOVERY'].includes(state.phase) ||
         state.history.length >= MAX_STEPS ||
+        (state.history.length === 0 && event.interaction.skipped) ||
         (!event.interaction.skipped && !event.interaction.answer.trim())
       )
         return state

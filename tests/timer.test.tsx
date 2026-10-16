@@ -4,9 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QuestionExperience } from '../src/components/onboarding/QuestionExperience'
 import { introduction } from '../src/features/onboarding/director'
 import type { Question } from '../src/types/session'
+const choices: Question = {
+  ...introduction,
+  id: 'choices',
+  component: 'ChoiceCards',
+  options: [
+    { id: 'a', label: 'Документы', description: '', assetId: 'research' },
+    { id: 'b', label: 'Фотографии', description: '', assetId: 'creativity' },
+  ],
+}
 const tick = (seconds: number) => act(() => vi.advanceTimersByTime(seconds * 1000))
 function Experience({
-  question = introduction,
+  question = choices,
   paused = false,
   live = false,
   onSubmit = () => {},
@@ -110,7 +119,7 @@ describe('answer timebox', () => {
       ...introduction,
       id: 'swipe',
       component: 'SwipeCards',
-      options: introduction.options.slice(0, 2),
+      options: choices.options,
     }
     view.rerender(<Experience question={swipe} />)
     expect(screen.getByRole('timer')).toHaveTextContent('00:20')

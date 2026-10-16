@@ -35,6 +35,19 @@ export const requestSchema = z
   })
   .strict()
   .superRefine((value, ctx) => {
+    const first = value.history[0]
+    if (
+      first &&
+      (first.skipped ||
+        first.question.id !== 'intro' ||
+        first.question.component !== 'VoiceTextQuestion' ||
+        first.question.options.length)
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['history', 0],
+        message: 'A non-empty open introduction is required',
+      })
     if (new Set(value.history.map((h) => h.id)).size !== value.history.length)
       ctx.addIssue({ code: 'custom', message: 'Duplicate interaction IDs' })
     for (const h of value.history)

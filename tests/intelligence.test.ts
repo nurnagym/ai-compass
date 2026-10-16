@@ -188,6 +188,22 @@ describe('director and state machine', () => {
     s = sessionReducer(s, { type: 'RESTART' })
     expect(s).toEqual(initialSession())
   })
+  it('requires a real first open answer in the state machine and request schema', () => {
+    const state = sessionReducer(initialSession(), { type: 'START' })
+    expect(state.question.component).toBe('VoiceTextQuestion')
+    expect(sessionReducer(state, { type: 'SUBMIT', interaction: h('') })).toBe(state)
+    expect(requestSchema.safeParse({ mode: 'demo', history: [h('')] }).success).toBe(false)
+    expect(
+      requestSchema.safeParse({
+        mode: 'demo',
+        history: [{ ...h('Моя задача'), question: { ...introduction, component: 'ChoiceCards' } }],
+      }).success,
+    ).toBe(false)
+    expect(
+      requestSchema.safeParse({ mode: 'demo', history: [h('Хочу разобраться в документе')] })
+        .success,
+    ).toBe(true)
+  })
   it('recovers from API failure without losing the current interaction', () => {
     let s = sessionReducer(initialSession(), { type: 'START' })
     s = sessionReducer(s, { type: 'SUBMIT', interaction: h('Привет') })
