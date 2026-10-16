@@ -53,6 +53,8 @@ Restart the development server, then choose **Включить AI** on the welco
 
 Live questions use OpenAI **Responses API + Structured Outputs** with server-side Zod validation, `store: false`, a 25-second request timeout, zero automatic retries, and a 2,200-token response limit. `gpt-6.1` is the requested default; model availability, current pricing, and a successful real Responses request must be confirmed in your OpenAI project. No authenticated GPT-6.1 call has been validated in this workspace.
 
+Live API failures return an allowlisted `errorCode`, and the onboarding screen shows its corresponding Russian explanation: unavailable model, rejected key, access denied, exhausted quota, temporary rate limit, rejected request parameters, timeout or invalid/incomplete response. Raw provider error text, input and credentials are never returned or logged. A provider failure keeps the current answer and AI mode; the app does not silently switch to demo or retry paid calls. `/api/status` reports configuration only and does not contact OpenAI or establish model access.
+
 Voice requests microphone permission only after a click. Recording is limited to 45 seconds / 4 MiB, selects a supported WebM, MP4, or Ogg format, and stops tracks after recording/cancellation/navigation. The Worker forwards audio to OpenAI transcription and returns editable text. Submission is a separate action. Voice requires HTTPS or a browser-recognized secure local origin. Demo mode explicitly does **not** simulate successful transcription; text always works.
 
 ## Checks

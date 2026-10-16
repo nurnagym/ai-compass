@@ -1,7 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Locator } from '@playwright/test'
-async function start(page: Page) {
+async function start(page: Page, live = false) {
   await page.goto('/')
+  if (live) await page.getByRole('button', { name: 'Включить AI', exact: true }).click()
   await page.getByRole('button', { name: 'Найти свои возможности' }).click()
   await expect(page.getByRole('heading', { name: 'Расскажите немного о себе.' })).toBeVisible()
   await expect(page.getByRole('timer')).toBeVisible()
@@ -124,6 +125,35 @@ test('required open introduction survives an API failure and can be corrected', 
   await write(page, 'Читаю документы')
   await expect(page.locator('.scenario-options')).toBeVisible()
 })
+for (const [code, message] of [
+  ['AI_MODEL_UNAVAILABLE', 'Выбранная модель недоступна.'],
+  ['AI_QUOTA_EXCEEDED', 'В проекте OpenAI закончился доступный баланс'],
+]) {
+  test(`live ${code} explains the failure and retains the answer without switching to demo`, async ({
+    page,
+  }) => {
+    await page.route('**/api/status', (route) =>
+      route.fulfill({ json: { aiEnabled: true, demo: true } }),
+    )
+    let requests = 0
+    await page.route('**/api/onboarding/next', (route) => {
+      requests++
+      expect(route.request().postDataJSON().mode).toBe('live')
+      return route.fulfill({
+        status: 502,
+        json: { errorCode: code, error: 'private provider detail' },
+      })
+    })
+    await start(page, true)
+    await write(page, 'Я фотограф, люблю снимать портреты')
+    await expect(page.getByRole('alert')).toContainText(message)
+    await expect(page.getByRole('alert')).not.toContainText('private provider detail')
+    await expect(page.locator('.mode-badge')).toHaveText('AI-режим')
+    expect(requests).toBe(1)
+    await page.getByRole('button', { name: 'Вернуться к ответу' }).click()
+    await expect(page.getByRole('textbox')).toHaveValue('Я фотограф, люблю снимать портреты')
+  })
+}
 test('time limits can be extended, disabled and stay disabled across questions', async ({
   page,
 }) => {

@@ -1,10 +1,11 @@
-import OpenAI from 'openai'
+import OpenAI, { APIConnectionTimeoutError } from 'openai'
 import { zodTextFormat } from 'openai/helpers/zod'
 import { requestSchema, directorSchema, validateQuestion } from '../src/lib/schemas'
 import { demoNext, decide } from '../src/features/onboarding/director'
 import { buildMemory, extractDemoClaims } from '../src/features/onboarding/memory'
 import { rankTools } from '../src/features/evidence/evaluator'
 import { verifiedCatalog } from '../src/data/catalog'
+import { aiErrorMessages, type AIErrorCode } from '../src/lib/apiErrors'
 import type { Interaction } from '../src/types/session'
 export interface Env {
   COMPASS_API_KEY?: string
@@ -30,10 +31,34 @@ function json(body: unknown, status = 200, extra: Record<string, string> = {}) {
 }
 export class RequestError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  code?: AIErrorCode
+  constructor(status: number, message: string, code?: AIErrorCode) {
     super(message)
     this.status = status
+    this.code = code
   }
+}
+function aiFailure(code: AIErrorCode, status = 502) {
+  return new RequestError(status, aiErrorMessages[code], code)
+}
+function providerFailure(error: unknown): RequestError {
+  if (error instanceof RequestError) return error
+  const failure =
+    error && typeof error === 'object'
+      ? (error as { code?: unknown; status?: unknown; name?: unknown })
+      : {}
+  if (failure.code === 'insufficient_quota' || failure.code === 'billing_hard_limit_reached')
+    return aiFailure('AI_QUOTA_EXCEEDED')
+  if (failure.code === 'model_not_found') return aiFailure('AI_MODEL_UNAVAILABLE')
+  if (failure.status === 401 || failure.code === 'invalid_api_key')
+    return aiFailure('AI_AUTH_FAILED')
+  if (failure.status === 403) return aiFailure('AI_ACCESS_DENIED')
+  if (failure.status === 429) return aiFailure('AI_PROVIDER_RATE_LIMITED')
+  if (failure.status === 400 || failure.status === 422) return aiFailure('AI_REQUEST_REJECTED')
+  if (error instanceof APIConnectionTimeoutError) return aiFailure('AI_TIMEOUT', 504)
+  if (failure.name === 'SyntaxError' || failure.name === 'ZodError')
+    return aiFailure('AI_RESPONSE_INVALID')
+  return aiFailure('AI_PROVIDER_UNAVAILABLE')
 }
 export async function boundedBody(request: Request, maximum: number): Promise<Uint8Array> {
   const length = request.headers.get('Content-Length')
@@ -75,12 +100,12 @@ function client(env: Env) {
   })
 }
 async function allowAI(request: Request, env: Env) {
-  if (!enabled(env)) throw new RequestError(503, 'AI disabled or not configured')
+  if (!enabled(env)) throw aiFailure('AI_DISABLED', 503)
   // Cloudflare native limiter: no history or permanent application profile. Fail closed without binding.
-  if (!env.AI_RATE_LIMITER) throw new RequestError(503, 'Rate limiter unavailable')
+  if (!env.AI_RATE_LIMITER) throw aiFailure('AI_LIMITER_UNAVAILABLE', 503)
   const ip = request.headers.get('CF-Connecting-IP') || 'local-development'
   const { success } = await env.AI_RATE_LIMITER.limit({ key: ip })
-  if (!success) throw new RequestError(429, 'Please wait before trying again')
+  if (!success) throw aiFailure('AI_RATE_LIMITED', 429)
 }
 export async function liveNext(history: Interaction[], env: Env) {
   const preliminary = buildMemory(extractDemoClaims(history), history)
@@ -121,15 +146,16 @@ export async function liveNext(history: Interaction[], env: Env) {
     }),
     text: { format: zodTextFormat(directorSchema, 'onboarding_director') },
   })
+  if (response.status === 'incomplete') throw aiFailure('AI_RESPONSE_INCOMPLETE')
   const parsed = directorSchema.safeParse(response.output_parsed)
   if (!parsed.success || (parsed.data.question && !validateQuestion(parsed.data.question)))
-    throw new RequestError(502, 'Invalid AI response')
+    throw aiFailure('AI_RESPONSE_INVALID')
   const next = parsed.data.question
   if (
     next?.component === 'AppRecognition' &&
     next.options.some((o) => !verifiedCatalog.some((t) => t.id === o.id))
   )
-    throw new RequestError(502, 'Unknown product in AI response')
+    throw aiFailure('AI_RESPONSE_INVALID')
   return decide(history, parsed.data.claims, { action: parsed.data.action, question: next }, 'live')
 }
 export default {
@@ -202,13 +228,14 @@ export default {
       return json({ text: transcript.text.slice(0, 1800) })
     } catch (error) {
       // Never log answers, audio, model prompts, raw provider errors, or credentials.
-      if (error instanceof RequestError)
-        return json(
-          { error: error.message },
-          error.status,
-          error.status === 429 ? { 'Retry-After': '60' } : {},
-        )
-      return json({ error: 'AI provider unavailable. Please retry or use demo mode.' }, 502)
+      const failure = providerFailure(error)
+      return json(
+        { error: failure.message, ...(failure.code ? { errorCode: failure.code } : {}) },
+        failure.status,
+        failure.code === 'AI_RATE_LIMITED' || failure.code === 'AI_PROVIDER_RATE_LIMITED'
+          ? { 'Retry-After': '60' }
+          : {},
+      )
     }
   },
 }

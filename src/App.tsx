@@ -18,6 +18,7 @@ import { RecommendationCard } from './components/recommendations/RecommendationC
 import { assets } from './data/assets'
 import { initialSession, sessionReducer } from './features/onboarding/machine'
 import { ru } from './lib/i18n'
+import { apiErrorMessage } from './lib/apiErrors'
 import type { DirectorResult } from './types/session'
 export default function App() {
   const [restoredAnswer, setRestoredAnswer] = useState('')
@@ -77,14 +78,14 @@ export default function App() {
         body: JSON.stringify({ mode, history }),
         signal: abort.signal,
       })
-      if (!response.ok)
-        throw new Error(
-          response.status === 429
-            ? 'Слишком много запросов. Подождите минуту и попробуйте снова.'
-            : response.status === 503
-              ? 'AI сейчас недоступен. Попробуйте позже или начните демо.'
-              : 'Не удалось получить следующий вопрос. Ваш ответ остался в этой вкладке.',
-        )
+      if (!response.ok) {
+        const failure: unknown = await response.json().catch(() => null)
+        const code =
+          failure && typeof failure === 'object' && 'errorCode' in failure
+            ? failure.errorCode
+            : undefined
+        throw new Error(apiErrorMessage(code, response.status))
+      }
       const result = (await response.json()) as DirectorResult
       if (
         !result.focus ||

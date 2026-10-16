@@ -1,12 +1,14 @@
 // @vitest-environment node
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 const mocks = vi.hoisted(() => ({ parse: vi.fn(), transcribe: vi.fn() }))
-vi.mock('openai', () => ({
+vi.mock('openai', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('openai')>()),
   default: class {
     responses = { parse: mocks.parse }
     audio = { transcriptions: { create: mocks.transcribe } }
   },
 }))
+import { APIError, APIConnectionTimeoutError } from 'openai'
 import worker, { boundedBody, type Env } from '../worker/index'
 import { introduction } from '../src/features/onboarding/director'
 const env: Env = {
@@ -49,6 +51,7 @@ describe('Worker API contracts and cost guards', () => {
       AI_RATE_LIMITER: undefined,
     })
     expect(r.status).toBe(503)
+    expect(await r.json()).toMatchObject({ errorCode: 'AI_LIMITER_UNAVAILABLE' })
   })
   it('applies shared IP rate limiting before calling provider', async () => {
     const limit = vi.fn().mockResolvedValue({ success: false })
@@ -57,6 +60,7 @@ describe('Worker API contracts and cost guards', () => {
       { ...env, AI_RATE_LIMITER: { limit } },
     )
     expect(r.status).toBe(429)
+    expect(await r.json()).toMatchObject({ errorCode: 'AI_RATE_LIMITED' })
     expect(r.headers.get('Retry-After')).toBe('60')
     expect(limit).toHaveBeenCalledWith({ key: '192.0.2.1' })
     expect(mocks.parse).not.toHaveBeenCalled()
@@ -138,6 +142,53 @@ describe('Worker API contracts and cost guards', () => {
     const r = await worker.fetch(req({ mode: 'live', history }), env)
     expect(r.status).toBe(502)
     expect(await r.text()).not.toContain('secret user answer')
+  })
+  it.each([
+    [404, 'model_not_found', 'AI_MODEL_UNAVAILABLE'],
+    [401, 'invalid_api_key', 'AI_AUTH_FAILED'],
+    [403, null, 'AI_ACCESS_DENIED'],
+    [429, 'insufficient_quota', 'AI_QUOTA_EXCEEDED'],
+    [429, 'billing_hard_limit_reached', 'AI_QUOTA_EXCEEDED'],
+    [429, 'rate_limit_exceeded', 'AI_PROVIDER_RATE_LIMITED'],
+    [400, 'invalid_json_schema', 'AI_REQUEST_REJECTED'],
+    [500, null, 'AI_PROVIDER_UNAVAILABLE'],
+  ] as const)(
+    'classifies provider %s / %s without disclosing raw details',
+    async (status, code, expected) => {
+      mocks.parse.mockRejectedValue(
+        new APIError(
+          status,
+          {
+            code,
+            message: 'private credential and user answer',
+            param: 'private parameter',
+          },
+          undefined,
+          new Headers(),
+        ),
+      )
+      const r = await worker.fetch(req({ mode: 'live', history }), env)
+      expect(r.status).toBe(502)
+      const data = await r.json()
+      expect(data).toMatchObject({ errorCode: expected })
+      expect(JSON.stringify(data)).not.toContain('private')
+      expect(mocks.parse).toHaveBeenCalledTimes(1)
+    },
+  )
+  it('distinguishes an actual SDK timeout and incomplete or unparseable responses', async () => {
+    mocks.parse.mockRejectedValueOnce(
+      new APIConnectionTimeoutError({ message: 'private timeout detail' }),
+    )
+    const timeout = await worker.fetch(req({ mode: 'live', history }), env)
+    expect(timeout.status).toBe(504)
+    expect(await timeout.json()).toMatchObject({ errorCode: 'AI_TIMEOUT' })
+    mocks.parse.mockResolvedValueOnce({ status: 'incomplete', output_parsed: null })
+    expect(await (await worker.fetch(req({ mode: 'live', history }), env)).json()).toMatchObject({
+      errorCode: 'AI_RESPONSE_INCOMPLETE',
+    })
+    mocks.parse.mockRejectedValueOnce(new SyntaxError('private response fragment'))
+    const invalid = await worker.fetch(req({ mode: 'live', history }), env)
+    expect(await invalid.json()).toMatchObject({ errorCode: 'AI_RESPONSE_INVALID' })
   })
   it('does not accept unsupported recording formats', async () => {
     const form = new FormData()
