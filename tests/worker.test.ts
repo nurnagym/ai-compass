@@ -130,6 +130,53 @@ describe('Worker API contracts and cost guards', () => {
     expect(JSON.parse(call.input).candidateTools.length).toBeLessThanOrEqual(8)
     expect(call.text.format.type).toBe('json_schema')
   })
+  it('clips oversized model text and replaces an unusable question with a curated one', async () => {
+    mocks.parse.mockResolvedValue({
+      output_parsed: {
+        action: 'ASK',
+        claims: [
+          {
+            kind: 'fact',
+            text: 'Читаю документы '.repeat(30),
+            quote: 'Читаю документы',
+            sourceId: 'step-1',
+            domain: 'research',
+            negative: false,
+            toolId: null,
+          },
+          {
+            kind: 'fact',
+            text: 'Пустая цитата',
+            quote: ' ',
+            sourceId: 'step-1',
+            domain: 'research',
+            negative: false,
+            toolId: null,
+          },
+        ],
+        question: {
+          ...introduction,
+          id: 'next',
+          component: 'AppRecognition',
+          title: 'Что из этого вам знакомо?',
+          options: [
+            { id: 'chatgpt', label: 'ChatGPT', description: '', assetId: 'productivity' },
+            { id: 'excel', label: 'Excel', description: '', assetId: 'analytics' },
+          ],
+        },
+      },
+    })
+    const r = await worker.fetch(req({ mode: 'live', history }), env)
+    expect(r.status).toBe(200)
+    const data = (await r.json()) as {
+      question: { id: string; options: { id: string }[] }
+      memory: { confirmedFacts: { text: string }[] }
+    }
+    expect(data.memory.confirmedFacts).toHaveLength(1)
+    expect(data.memory.confirmedFacts[0].text.length).toBeLessThanOrEqual(240)
+    expect(data.question.id).toBe('question-2')
+    expect(data.question.options.map((o) => o.id)).not.toContain('excel')
+  })
   it('rejects invalid model layouts and hides raw provider errors', async () => {
     mocks.parse.mockResolvedValue({
       output_parsed: {

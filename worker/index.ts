@@ -1,8 +1,10 @@
 import OpenAI, { APIConnectionTimeoutError } from 'openai'
 import { zodTextFormat } from 'openai/helpers/zod'
+import type { z } from 'zod'
 import {
   requestSchema,
-  directorSchema,
+  claimSchema,
+  questionSchema,
   directorModelSchema,
   validateQuestion,
 } from '../src/lib/schemas'
@@ -11,7 +13,7 @@ import { buildMemory, extractDemoClaims } from '../src/features/onboarding/memor
 import { rankTools } from '../src/features/evidence/evaluator'
 import { verifiedCatalog } from '../src/data/catalog'
 import { aiErrorMessages, type AIErrorCode } from '../src/lib/apiErrors'
-import type { Interaction } from '../src/types/session'
+import type { Interaction, Question } from '../src/types/session'
 export interface Env {
   COMPASS_API_KEY?: string
   OPENAI_API_KEY?: string
@@ -158,16 +160,55 @@ export async function liveNext(history: Interaction[], env: Env) {
     text: { format: zodTextFormat(directorModelSchema, 'onboarding_director') },
   })
   if (response.status === 'incomplete') throw aiFailure('AI_RESPONSE_INCOMPLETE')
-  const parsed = directorSchema.safeParse(response.output_parsed)
-  if (!parsed.success || (parsed.data.question && !validateQuestion(parsed.data.question)))
-    throw aiFailure('AI_RESPONSE_INVALID')
-  const next = parsed.data.question
-  if (
-    next?.component === 'AppRecognition' &&
-    next.options.some((o) => !verifiedCatalog.some((t) => t.id === o.id))
+  const raw = directorModelSchema.safeParse(response.output_parsed)
+  if (!raw.success) throw aiFailure('AI_RESPONSE_INVALID')
+  // The model's output is a proposal. Oversized text is clipped and individual invalid
+  // claims are dropped; an unusable question falls back to the curated next question
+  // instead of stopping the session. Reasons are logged as codes only, never content.
+  const claims = raw.data.claims
+    .slice(0, 28)
+    .map((c) => ({
+      ...c,
+      text: clip(c.text, 240),
+      quote: clip(c.quote, 240),
+      sourceId: clip(c.sourceId, 60),
+      toolId: c.toolId === null ? null : clip(c.toolId, 60),
+    }))
+    .filter((c) => claimSchema.safeParse(c).success)
+  if (claims.length < raw.data.claims.length) console.warn('director: dropped invalid claims')
+  return decide(
+    history,
+    claims,
+    { action: raw.data.action, question: usableQuestion(raw.data.question) },
+    'live',
   )
-    throw aiFailure('AI_RESPONSE_INVALID')
-  return decide(history, parsed.data.claims, { action: parsed.data.action, question: next }, 'live')
+}
+function clip(value: string, maximum: number) {
+  const trimmed = value.trim()
+  return trimmed.length > maximum ? `${trimmed.slice(0, maximum - 1).trimEnd()}…` : trimmed
+}
+type ModelQuestion = NonNullable<z.infer<typeof directorModelSchema>['question']>
+export function usableQuestion(question: ModelQuestion | null): Question | null {
+  if (!question) return null
+  let options = question.options.slice(0, 6).map((o) => ({
+    ...o,
+    id: clip(o.id, 50),
+    label: clip(o.label, 120),
+    description: clip(o.description, 200),
+  }))
+  // AppRecognition may only show verified catalog tools; drop anything else.
+  if (question.component === 'AppRecognition')
+    options = options.filter((o) => verifiedCatalog.some((t) => t.id === o.id))
+  const candidate = questionSchema.safeParse({
+    ...question,
+    id: clip(question.id, 60) || 'proposal',
+    title: clip(question.title, 260),
+    description: clip(question.description, 300),
+    options,
+  })
+  if (candidate.success && validateQuestion(candidate.data)) return candidate.data
+  console.warn(`director: unusable ${question.component} question, using fallback`)
+  return null
 }
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
