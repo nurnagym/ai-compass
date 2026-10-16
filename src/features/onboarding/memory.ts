@@ -42,7 +42,7 @@ export function buildMemory(claims: Claim[], history: Interaction[]): Memory {
       memory.contradictions.push({ domain, sourceIds: [...new Set(items.map((c) => c.sourceId))] })
   }
   memory.unknowns = []
-  if (!supported.some((c) => !c.negative)) memory.unknowns.push('Конкретная задача или интерес')
+  if (!supported.some((c) => !c.negative)) memory.unknowns.push('Занятия и интересы человека')
   if (!history.some((h) => h.question.targetGap === 'constraints' && !h.skipped))
     memory.unknowns.push('Устройство и ограничения установки')
   if (
@@ -66,7 +66,7 @@ const patterns: Record<Domain, RegExp> = {
   learning: /учусь|студент|уч[её]б|изуч|универс|student|learn|university/i,
   presentations: /презентац|слайд|presentation|slides/i,
   communication: /встреч|совещан|общени|перепис|meeting|communicat/i,
-  everyday: /повседнев|обычн|быт|рецепт|путешеств|everyday|recipe|travel/i,
+  everyday: /повседнев|обычн|(?:^|[^\p{L}])быт|рецепт|путешеств|everyday|recipe|travel/iu,
 }
 export function extractDemoClaims(history: Interaction[]): Claim[] {
   const claims: Claim[] = []
@@ -89,7 +89,10 @@ export function extractDemoClaims(history: Interaction[]): Claim[] {
           quote: clause.trim().slice(0, 240),
           sourceId: h.id,
           domain: domain as Domain,
-          negative: /\bnot\b|\bdon't\b|не\s+(?:\S+\s+){0,2}$|без\s*$|не\s+интерес/i.test(before),
+          negative:
+            /\bnot\b|\bdon't\b|(?:^|[^\p{L}])не\s+(?:\S+\s+){0,2}$|(?:^|[^\p{L}])без\s*$|(?:^|[^\p{L}])не\s+интерес/iu.test(
+              before,
+            ),
           toolId: null,
         })
       }

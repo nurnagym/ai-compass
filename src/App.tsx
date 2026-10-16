@@ -181,7 +181,7 @@ export default function App() {
                         может <span>для вас.</span>
                       </h1>
                       <p className="welcome-description">
-                        Одна фраза о вашей задаче.
+                        Немного о вас и ваших интересах.
                         <br />
                         Инструменты, о которых вы могли не знать.
                         <br />
@@ -197,7 +197,7 @@ export default function App() {
                       <div className="welcome-proof">
                         <span>
                           <Check size={15} />
-                          Под ваши задачи
+                          Под ваши интересы
                         </span>
                         <span>
                           <Check size={15} />
@@ -271,7 +271,7 @@ export default function App() {
                     <p>
                       {session.result?.recommendations.length
                         ? 'Несколько идей, с которых можно начать. Выберите то, что откликается.'
-                        : 'Пока мало информации для полезного совпадения. Можно начать заново и рассказать об одной конкретной задаче.'}
+                        : 'Пока мало информации для полезного совпадения. Можно начать заново и рассказать о своих занятиях и интересах.'}
                     </p>
                   </div>
                   <div className="results-grid">
@@ -558,7 +558,7 @@ function DiscoveryIllustration() {
         <div>
           <small>ОСВОБОДИТЬ ВРЕМЯ</small>
           <strong>Меньше рутины. Больше жизни.</strong>
-          <span>Ваши повседневные задачи</span>
+          <span>Ваши занятия и увлечения</span>
         </div>
         <ArrowUpRight size={15} />
       </div>

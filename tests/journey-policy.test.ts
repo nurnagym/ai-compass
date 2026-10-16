@@ -15,7 +15,7 @@ function selectedAnswer(question: Question, persona: string): string {
 }
 describe('quick adaptive journey policy', () => {
   it.each(['student', 'creative', 'office', 'everyday'])(
-    'finishes %s with real selections and an early swipe',
+    'learns about %s without a stated goal, then finishes with real selections and an early swipe',
     (persona) => {
       const history: Interaction[] = []
       let question = introduction
@@ -28,6 +28,19 @@ describe('quick adaptive journey policy', () => {
           skipped: false,
         })
         result = demoNext(history)
+        if (i === 0) {
+          expect(result.memory.goals).toEqual([])
+          expect(result.memory.confirmedFacts.length).toBeGreaterThan(0)
+          expect(result.question?.targetGap).toBe(
+            {
+              student: 'learning',
+              creative: 'video',
+              office: 'communication',
+              everyday: 'everyday',
+            }[persona],
+          )
+          expect(result.question?.title).not.toMatch(/упростить|помощь|проблем/)
+        }
         if (!result.question) break
         question = result.question
       }
@@ -52,11 +65,21 @@ describe('quick adaptive journey policy', () => {
     const q = demoNext([first]).question!
     const forWriting = demoNext([
       first,
-      { id: 'step-2', question: q, answer: 'Написать письма', skipped: false },
+      {
+        id: 'step-2',
+        question: q,
+        answer: q.options.find((o) => o.id === 'writing')!.label,
+        skipped: false,
+      },
     ]).question!
     const forAudio = demoNext([
       first,
-      { id: 'step-2', question: q, answer: 'Расшифровать запись встречи', skipped: false },
+      {
+        id: 'step-2',
+        question: q,
+        answer: q.options.find((o) => o.id === 'audio')!.label,
+        skipped: false,
+      },
     ]).question!
     expect(forWriting.component).toBe('SwipeCards')
     expect(forAudio.component).toBe('SwipeCards')

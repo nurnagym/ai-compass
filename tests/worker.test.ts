@@ -110,7 +110,7 @@ describe('Worker API contracts and cost guards', () => {
             toolId: null,
           },
         ],
-        question: { ...introduction, id: 'next', title: 'Какие документы сложнее всего читать?' },
+        question: { ...introduction, id: 'next', title: 'Какие документы вы чаще читаете?' },
       },
     })
     const r = await worker.fetch(req({ mode: 'live', history }), env)

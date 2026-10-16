@@ -3,9 +3,7 @@ import { expect, test, type Page, type Locator } from '@playwright/test'
 async function start(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Найти свои возможности' }).click()
-  await expect(
-    page.getByRole('heading', { name: 'Какую задачу вы хотели бы упростить?' }),
-  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Расскажите немного о себе.' })).toBeVisible()
   await expect(page.getByRole('timer')).toBeVisible()
   await expect(page.getByRole('textbox')).toHaveJSProperty('required', true)
   await expect(page.getByRole('button', { name: 'Пропустить', exact: true })).toHaveCount(0)
@@ -65,9 +63,9 @@ test('student starts with a required open answer, then gets choices and swipes',
   page,
 }) => {
   await start(page)
-  await write(page, 'Хочу быстрее разбираться в исследовательских статьях и документах')
+  await write(page, 'Я студент, читаю исследовательские статьи и документы')
   await expect(page.locator('.scenario-options')).toBeVisible()
-  await select(page, page.getByRole('button', { name: /Быстро понять документ/ }))
+  await select(page, page.getByRole('button', { name: /Читаю статьи и документы/ }))
   await expect(page.locator('.swipe-card')).toBeVisible()
   await expect(page.getByRole('textbox')).toHaveCount(0)
   await finish(page)
@@ -87,12 +85,14 @@ test('student starts with a required open answer, then gets choices and swipes',
 })
 test('creative choices change the follow-up; Back allows a correction', async ({ page }) => {
   await start(page)
-  await write(page, 'Хочу улучшать фотографии и видео')
+  await write(page, 'Я фотограф, люблю снимать фотографии и видео')
   await expect(page.locator('.comparison')).toBeVisible()
   await page.getByRole('button', { name: 'Назад', exact: true }).click()
-  await expect(page.getByRole('textbox')).toHaveValue('Хочу улучшать фотографии и видео')
-  await write(page, 'Хочу улучшать фотографии')
-  await select(page, page.getByRole('button', { name: /Улучшать фотографии/ }))
+  await expect(page.getByRole('textbox')).toHaveValue(
+    'Я фотограф, люблю снимать фотографии и видео',
+  )
+  await write(page, 'Я фотограф, люблю снимать портреты')
+  await select(page, page.getByRole('button', { name: /Фотографировать/ }))
   await finish(page)
   await expect(page.getByRole('heading', { name: 'Upscayl', exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
@@ -132,7 +132,7 @@ test('time limits can be extended, disabled and stay disabled across questions',
   await expect(page.getByRole('timer')).toHaveText(/00:(?:3\d|40)/)
   await page.getByRole('button', { name: 'Без таймера', exact: true }).click()
   await expect(page.getByRole('timer')).toHaveCount(0)
-  await write(page, 'Хочу писать тексты проще')
+  await write(page, 'В свободное время пишу тексты')
   await expect(page.getByText('В своём темпе')).toBeVisible()
   await expect(page.getByRole('timer')).toHaveCount(0)
   await page.getByRole('button', { name: 'Включить таймер' }).click()
@@ -169,8 +169,8 @@ test('gallery previews all six interactions without AI requests', async ({ page 
   expect(calls).toBe(0)
 })
 for (const [name, choice] of [
-  ['office', 'Хочу расшифровывать записи встреч и разбираться с документами'],
-  ['everyday', 'Хочу писать тексты для повседневной жизни'],
+  ['office', 'Работаю в офисе с документами, участвую во встречах'],
+  ['everyday', 'Люблю путешествовать и писать тексты о повседневной жизни'],
 ]) {
   test(`${name} persona completes using only quick interactions`, async ({ page }) => {
     await start(page)

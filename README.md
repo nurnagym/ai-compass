@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open the address printed by Vite in your own browser. Demo mode is the default: it needs no API key and makes no paid API calls. Start with one required open answer about a task you want to simplify. After that, the director selects relevant interaction formats; ready-made choices and optional text/voice remain available. Demo responses use keyword-based simulation, **not a real AI director**. Answers are sent to the same-origin Worker for in-memory processing, not to OpenAI. The development-only component gallery is available using the footer or `/#gallery`; it is excluded from production.
+Open the address printed by Vite in your own browser. Demo mode is the default: it needs no API key and makes no paid API calls. Start with one required open introduction about yourself, your activities and interests. After that, the director selects relevant interaction formats; ready-made choices and optional text/voice remain available. Demo responses use keyword-based simulation, **not a real AI director**. Answers are sent to the same-origin Worker for in-memory processing, not to OpenAI. The development-only component gallery is available using the footer or `/#gallery`; it is excluded from production.
 
 In the restricted cloud workspace, use writable tool paths:
 
@@ -24,9 +24,9 @@ npm run dev -- --port 5173
 
 ## One open introduction, then the adaptive engine
 
-The first question is always **VoiceTextQuestion**: «Какую задачу вы хотели бы упростить?» One short phrase is enough. This first answer is required: Continue is disabled for empty/whitespace input, there is no Skip action, and both the session state machine and backend reject a skipped or non-open introduction. No director request is made until the user submits that answer. With transcription configured, users can record and edit their first answer before submitting it.
+The first question is always **VoiceTextQuestion**: «Расскажите немного о себе.» A couple of sentences about work, studies, hobbies or everyday life is enough; no task or goal needs to be stated. This first answer is required: Continue is disabled for empty/whitespace input, there is no Skip action, and both the session state machine and backend reject a skipped or non-open introduction. No director request is made until the user submits that answer. With transcription configured, users can record and edit their first answer before submitting it.
 
-After the introduction, the engine chooses relevant questions and formats based on that answer. Demo mode uses curated rules; live mode uses the existing OpenAI Responses integration. Both retain safeguards against long interviews and consecutive open questions, introduce swipes early, check practical constraints, and terminate within seven interactions. The live director can select all six component types, including one additional short open clarification when useful. It does not return to three mandatory open questions. Back/restart always restore the same required open introduction.
+After the introduction, the engine first asks about activities and preferences relevant to that person, then explores useful opportunities through swipes. It chooses questions and formats from actual answers, without assuming difficulties or needs from an occupation or hobby. Demo mode uses curated rules; live mode uses the existing OpenAI Responses integration. Both retain safeguards against long interviews and consecutive open questions, introduce swipes early, check practical constraints, and terminate within seven interactions. The live director can select all six component types, including one additional short open clarification when useful. It does not return to three mandatory open questions. Back/restart always restore the same required open introduction.
 
 Single-selection cards advance immediately. Multiple-selection cards still require Continue. On closed questions users can switch to editable text/voice and back to choices without losing their draft. Every actual answer retains evidence provenance; unselected options are never evidence.
 

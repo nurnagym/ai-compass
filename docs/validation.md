@@ -2,13 +2,13 @@
 
 Validated in this cloud workspace on 2026-10-16 with Node 24.19.0, npm 11.9.0 and the project dependency lockfile. The repository started empty; all application files were created for this build. These checks do not deploy to Cloudflare or publish an environment snapshot. GitHub source updates are tracked separately through commits.
 
-## Required open introduction update
+## Person-first introduction update
 
-The first question is always open and required: «Какую задачу вы хотели бы упростить?» Empty/whitespace or skipped first answers are blocked in the UI, state machine and backend. A non-open first interaction is rejected by the API. No director request is sent until a real answer is submitted. Restart and Back restore the required opening.
+The first question is always open and required: «Расскажите немного о себе.» Empty/whitespace or skipped first answers are blocked in the UI, state machine and backend. A non-open first interaction is rejected by the API. No director request is sent until a real answer is submitted. Restart and Back restore the required opening.
 
-After that answer the engine adapts the questions and formats. The live director may select all six mechanisms, including a focused open clarification, while avoiding consecutive open questions and enforcing the interview budget. Demo mode continues to simulate the same transition using rules; it does not activate paid AI calls. The 20-second timer and its extension/disabling/pause behavior are preserved and never bypass the required answer.
+The introduction asks about occupation, studies, hobbies and everyday life. No problem or goal needs to be stated. Follow-ups first clarify activities and preferences; relevant opportunities follow through swipes. Demo journeys use biographies without stated goals and verify that the engine keeps goals empty instead of inventing a need. The live director is instructed to follow the same approach, without inferring difficulties from a role or hobby. The live director may select all six mechanisms, including a focused open clarification, while avoiding consecutive open questions and enforcing the interview budget. Demo mode continues to simulate the same transition using rules; it does not activate paid AI calls. The 20-second timer and its extension/disabling/pause behavior are preserved and never bypass the required answer.
 
-Five functional HTTP journeys cover four meaningful opening answers and a vague required opening with skipped follow-ups. They finish in 4–5 steps with 4–5 formats and catalog-backed results. Browser checks cover required input, adaptive choices/swipes, corrected opening answers, errors, timer expiry preserving the first answer, and restarted sessions. AI-provider calls remain mocked in automated tests.
+Five functional HTTP journeys cover four biographical opening answers without stated goals and a vague required opening with skipped follow-ups. They finish in 4–5 steps with 4–5 formats and catalog-backed results. Browser checks cover required input, adaptive choices/swipes, corrected opening answers, errors, timer expiry preserving the first answer, and restarted sessions. AI-provider calls remain mocked in automated tests.
 
 ## Passed
 

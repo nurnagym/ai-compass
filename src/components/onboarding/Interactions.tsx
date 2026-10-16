@@ -52,7 +52,11 @@ export function VoiceTextQuestion({
           required={required}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Например: хочу быстрее разбираться в документах"
+          placeholder={
+            required
+              ? 'Например: учусь на экономиста, люблю фотографировать и путешествовать.'
+              : 'Напишите короткий ответ…'
+          }
           rows={3}
           disabled={busy}
         />
@@ -107,7 +111,7 @@ export function VoiceTextQuestion({
       </div>
       <p className="helper">
         {question.targetGap === 'introduction'
-          ? 'Одной фразы достаточно. Этот ответ нужен, чтобы подобрать следующие вопросы.'
+          ? 'Пары фраз достаточно. Начнём с ваших занятий и интересов.'
           : 'Можно ответить коротко — или пропустить.'}
       </p>
     </div>

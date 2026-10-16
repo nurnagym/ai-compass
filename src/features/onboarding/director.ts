@@ -25,29 +25,29 @@ const option = (
 export const introduction: Question = {
   id: 'intro',
   component: 'VoiceTextQuestion',
-  title: 'Какую задачу вы хотели бы упростить?',
-  description: 'Один пример из работы, учёбы или повседневной жизни. Достаточно одной фразы.',
+  title: 'Расскажите немного о себе.',
+  description: 'Чем вы занимаетесь и что вам интересно? Достаточно пары фраз.',
   options: [],
   multiple: false,
   targetGap: 'introduction',
 }
-// Fixtures for exercising distinct needs; real users choose their own activities, not a fictional profile.
+// Fixtures for exercising distinct backgrounds and interests; real users choose their own activities, not a fictional profile.
 export const personas = [
   {
     id: 'student',
-    text: 'Я студент. Читаю исследовательские статьи и работаю с таблицами Excel. Хочу быстрее разбираться в источниках.',
+    text: 'Я студент. Читаю исследовательские статьи и работаю с таблицами Excel.',
   },
   {
     id: 'creative',
-    text: 'Я фотограф и снимаю видео. Хочу улучшать качество изображений и тратить меньше времени на обработку.',
+    text: 'Я фотограф. Люблю снимать портреты и видео о событиях.',
   },
   {
     id: 'office',
-    text: 'Я работаю в офисе. Много документов и повторяющихся задач. Хочу расшифровывать записи встреч и упорядочить заметки.',
+    text: 'Я работаю в офисе. В моём дне много документов, встреч и переписки.',
   },
   {
     id: 'everyday',
-    text: 'Я пока не знаком с AI. Хочу помощника для повседневной жизни: объяснять сложное простыми словами и помогать писать тексты.',
+    text: 'Люблю путешествовать и писать тексты о повседневной жизни. С AI пока не знаком.',
   },
 ] as const
 export function primaryDomain(memory: Memory): Domain {
@@ -71,39 +71,39 @@ function quickChoice(domain: Domain, id: string): Question {
     return {
       ...base,
       component: 'ScenarioGame',
-      title: 'Перед вами большой документ. Что хочется упростить?',
+      title: 'Чему вы чаще уделяете время?',
       options: [
-        option('research', 'Быстро понять документ', 'research'),
-        option('learning', 'Разобраться в сложной теме', 'education'),
-        option('data', 'Разобрать данные в таблице', 'analytics'),
+        option('research', 'Читаю статьи и документы', 'research'),
+        option('learning', 'Изучаю новые темы', 'education'),
+        option('data', 'Работаю с таблицами и данными', 'analytics'),
       ],
     }
   if (['productivity', 'communication', 'audio'].includes(domain))
     return {
       ...base,
       component: 'ScenarioGame',
-      title: 'Рабочий день закончился. Что ещё осталось?',
+      title: 'Что чаще встречается в вашем дне?',
       options: [
-        option('documents', 'Разобраться с документами', 'research'),
-        option('audio', 'Расшифровать запись встречи', 'audio'),
-        option('writing', 'Написать письма', 'writing'),
+        option('documents', 'Документы и заметки', 'research'),
+        option('audio', 'Встречи и разговоры', 'audio'),
+        option('writing', 'Письма', 'writing'),
       ],
     }
   if (['design', 'video'].includes(domain))
     return {
       ...base,
       component: 'ThisOrThat',
-      title: 'Что хочется делать проще?',
+      title: 'Что вам ближе в творчестве?',
       options: [
-        option('design', 'Улучшать фотографии', 'creativity'),
-        option('video', 'Обрабатывать видео', 'video'),
+        option('design', 'Фотографировать', 'creativity'),
+        option('video', 'Снимать видео', 'video'),
       ],
     }
   if (domain === 'coding')
     return {
       ...base,
       component: 'ThisOrThat',
-      title: 'Где помощь была бы полезнее?',
+      title: 'Что вам ближе в разработке?',
       options: [
         option('coding', 'Разбираться в чужом коде', 'coding'),
         option('build', 'Писать свой код', 'coding'),
@@ -112,10 +112,10 @@ function quickChoice(domain: Domain, id: string): Question {
   return {
     ...base,
     component: 'ThisOrThat',
-    title: 'Что пригодилось бы прямо сегодня?',
+    title: 'Что вам ближе в свободное время?',
     options: [
-      option('writing', 'Написать текст без мучений', 'writing'),
-      option('everyday', 'Разобраться в повседневном вопросе', 'everyday'),
+      option('writing', 'Писать тексты и делиться мыслями', 'writing'),
+      option('learning', 'Читать и изучать новое', 'education'),
     ],
   }
 }
@@ -293,7 +293,7 @@ export function decide(
     question: complete ? null : next,
     recommendations: complete ? recommendations : [],
     focus: {
-      currentGoal: 'Найти полезные инструменты с минимумом вопросов',
+      currentGoal: 'Узнать занятия и интересы человека и подобрать полезные инструменты',
       currentHypothesis: `Проверяем возможности для ${domainNames[primaryDomain(memory)]}`,
       missingEvidence: memory.unknowns,
       candidateTools: recommendations.map((r) => r.toolId),

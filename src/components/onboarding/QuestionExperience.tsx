@@ -70,7 +70,11 @@ export function QuestionExperience({
       )}
       {writeOwn || props.question.component === 'VoiceTextQuestion' ? (
         <>
-          <p className="own-answer-hint">Одна задача, в нескольких словах.</p>
+          <p className="own-answer-hint">
+            {props.question.id === 'intro'
+              ? 'Можно рассказать об учёбе, работе или увлечениях.'
+              : 'Можно ответить в нескольких словах.'}
+          </p>
           <VoiceTextQuestion
             {...props}
             initialAnswer={draft}

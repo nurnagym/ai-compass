@@ -6,8 +6,8 @@ assert.equal((await fetch(`${origin}/api/status`).then((r) => r.json())).demo, t
 const intro = {
   id: 'intro',
   component: 'VoiceTextQuestion',
-  title: 'Какую задачу вы хотели бы упростить?',
-  description: 'Что сейчас вам ближе?',
+  title: 'Расскажите немного о себе.',
+  description: 'Чем вы занимаетесь и что вам интересно? Достаточно пары фраз.',
   options: [],
   multiple: false,
   targetGap: 'introduction',
@@ -27,10 +27,10 @@ for (const name of ['student', 'creative', 'office', 'everyday', 'skipped']) {
     result
   for (let step = 0; step < 7; step++) {
     const intros = {
-      student: 'Хочу разбираться в исследовательских статьях и документах',
-      creative: 'Хочу улучшать фотографии и видео',
-      office: 'Хочу расшифровывать записи встреч и разбираться с документами',
-      everyday: 'Хочу писать тексты для повседневной жизни',
+      student: 'Я студент, читаю исследовательские статьи и документы',
+      creative: 'Я фотограф, люблю снимать фотографии и видео',
+      office: 'Работаю в офисе с документами, участвую во встречах',
+      everyday: 'Люблю путешествовать и писать тексты о повседневной жизни',
       skipped: 'Пока не знаю',
     }
     const answer =
