@@ -11,7 +11,7 @@
   },
   "observability": { "enabled": false },
   "vars": {
-    "AI_ENABLED": "false",
+    "AI_ENABLED": "true",
     "AI_MODEL": "gpt-4.1-mini",
     "TRANSCRIPTION_MODEL": "gpt-4o-mini-transcribe",
   },
