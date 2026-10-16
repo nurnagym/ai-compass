@@ -64,12 +64,51 @@ export const claimSchema = z
     toolId: z.string().max(60).nullable(),
   })
   .strict()
+const actionSchema = z.enum(['ASK', 'CLARIFY', 'EXPLORE', 'VALIDATE', 'RECOMMEND'])
 // No arbitrary HTML, assets, URLs, catalog entries, or layout structures are accepted.
 export const directorSchema = z
   .object({
-    action: z.enum(['ASK', 'CLARIFY', 'EXPLORE', 'VALIDATE', 'RECOMMEND']),
+    action: actionSchema,
     claims: z.array(claimSchema).max(28),
     question: questionSchema.nullable(),
+  })
+  .strict()
+// Shape sent to OpenAI Structured Outputs. Strict mode does not accept string length
+// keywords (minLength/maxLength), so the model sees the same structure without them;
+// every response is still validated against directorSchema on the server.
+const plain = z.string()
+export const directorModelSchema = z
+  .object({
+    action: actionSchema,
+    claims: z.array(
+      z
+        .object({
+          kind: z.enum(['fact', 'goal', 'interest', 'tool', 'hypothesis']),
+          text: plain,
+          quote: plain,
+          sourceId: plain,
+          domain: z.enum(domains),
+          negative: z.boolean(),
+          toolId: plain.nullable(),
+        })
+        .strict(),
+    ),
+    question: z
+      .object({
+        id: plain,
+        component: z.enum(componentTypes),
+        title: plain,
+        description: plain,
+        options: z.array(
+          z
+            .object({ id: plain, label: plain, description: plain, assetId: z.enum(assetIds) })
+            .strict(),
+        ),
+        multiple: z.boolean(),
+        targetGap: z.enum([...domains, 'familiarity', 'constraints', 'introduction']),
+      })
+      .strict()
+      .nullable(),
   })
   .strict()
 export function validateQuestion(q: z.infer<typeof questionSchema>): boolean {

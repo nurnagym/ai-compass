@@ -12,7 +12,8 @@
   "observability": { "enabled": false },
   "vars": {
     "AI_ENABLED": "true",
-    "AI_MODEL": "gpt-6.1",
+    "AI_MODEL": "gpt-6.1-sol",
+    "AI_REASONING_EFFORT": "low",
     "TRANSCRIPTION_MODEL": "gpt-4o-mini-transcribe",
   },
   "ratelimits": [

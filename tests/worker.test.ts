@@ -123,9 +123,10 @@ describe('Worker API contracts and cost guards', () => {
     expect(data.mode).toBe('live')
     expect(data.memory.confirmedFacts).toHaveLength(1)
     const call = mocks.parse.mock.calls[0][0]
-    expect(call.model).toBe('gpt-6.1')
+    expect(call.model).toBe('gpt-6.1-sol')
     expect(call.store).toBe(false)
-    expect(call.max_output_tokens).toBe(2200)
+    expect(call.max_output_tokens).toBe(8000)
+    expect(JSON.stringify(call.text.format.schema)).not.toMatch(/minLength|maxLength/)
     expect(JSON.parse(call.input).candidateTools.length).toBeLessThanOrEqual(8)
     expect(call.text.format.type).toBe('json_schema')
   })
