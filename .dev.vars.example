@@ -1,0 +1,6 @@
+# Copy to .dev.vars (ignored); never prefix secrets with VITE_.
+# Demo works with no file and no key.
+AI_ENABLED=false
+COMPASS_API_KEY=
+AI_MODEL=gpt-4.1-mini
+TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe

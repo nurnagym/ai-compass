@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ai-compass",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist/client",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "observability": { "enabled": false },
+  "vars": {
+    "AI_ENABLED": "false",
+    "AI_MODEL": "gpt-4.1-mini",
+    "TRANSCRIPTION_MODEL": "gpt-4o-mini-transcribe",
+  },
+  "ratelimits": [
+    { "name": "AI_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 12, "period": 60 } },
+  ],
+}
