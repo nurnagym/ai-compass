@@ -45,13 +45,13 @@ Edit **only the ignored `.dev.vars`** file:
 ```dotenv
 AI_ENABLED=true
 COMPASS_API_KEY=your-key-entered-locally
-AI_MODEL=gpt-4.1-mini
+AI_MODEL=gpt-6.1
 TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
 ```
 
 Restart the development server, then choose **Включить AI** on the welcome screen. The key is never included in the browser bundle. `OPENAI_API_KEY` is also accepted by the Worker for conventional deployments, but `COMPASS_API_KEY` avoids reserved names in cloud environment secret bindings. Do not prefix secrets with `VITE_`, commit them, or paste them into chat.
 
-Live questions use OpenAI **Responses API + Structured Outputs** with server-side Zod validation, `store: false`, a 25-second request timeout, zero automatic retries, and a 2,200-token response limit. `gpt-4.1-mini` is the configurable affordable default; confirm model availability and current pricing in your OpenAI project before launch.
+Live questions use OpenAI **Responses API + Structured Outputs** with server-side Zod validation, `store: false`, a 25-second request timeout, zero automatic retries, and a 2,200-token response limit. `gpt-6.1` is the requested default; model availability, current pricing, and a successful real Responses request must be confirmed in your OpenAI project. No authenticated GPT-6.1 call has been validated in this workspace.
 
 Voice requests microphone permission only after a click. Recording is limited to 45 seconds / 4 MiB, selects a supported WebM, MP4, or Ogg format, and stops tracks after recording/cancellation/navigation. The Worker forwards audio to OpenAI transcription and returns editable text. Submission is a separate action. Voice requires HTTPS or a browser-recognized secure local origin. Demo mode explicitly does **not** simulate successful transcription; text always works.
 

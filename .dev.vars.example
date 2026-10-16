@@ -2,5 +2,5 @@
 # Demo works with no file and no key.
 AI_ENABLED=false
 COMPASS_API_KEY=
-AI_MODEL=gpt-4.1-mini
+AI_MODEL=gpt-6.1
 TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
