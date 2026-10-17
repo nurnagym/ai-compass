@@ -123,6 +123,18 @@ export interface Recommendation {
   opportunityId?: string
   lifeArea?: LifeArea
   workflow?: string[]
+  tool?: ExternalTool
+}
+export interface ExternalTool {
+  id: string
+  name: string
+  officialUrl: string
+  description: string
+  source: 'sheet' | 'web'
+  sourceUrl: string
+  checkedAt: string
+  limitations: string[]
+  contextSources: { url: string; row: number }[]
 }
 export interface DirectorResult {
   action: Action

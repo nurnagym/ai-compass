@@ -77,7 +77,7 @@ export default function App() {
     const id = ++requestId.current,
       abort = new AbortController()
     controller.current = abort
-    const timeout = setTimeout(() => abort.abort(), 35000)
+    const timeout = setTimeout(() => abort.abort(), 120000)
     try {
       const response = await fetch('/api/turn', {
         method: 'POST',
@@ -386,7 +386,11 @@ export default function App() {
                               <Compass size={40} />
                             </span>
                             <h1>{ru.loading}</h1>
-                            <p>Собираем ответы в полезные идеи.</p>
+                            <p>
+                              {mode === 'live'
+                                ? 'Сопоставляем ответы с юзкейсами и решениями. Если в базе нет инструмента, проверяем варианты в интернете.'
+                                : 'Собираем ответы в полезные идеи.'}
+                            </p>
                           </div>
                         ) : session.phase === 'ERROR' ? (
                           <div className="error-state" role="alert">
@@ -520,7 +524,7 @@ function PrivacyDialog({ onClose, mode }: { onClose: () => void; mode: string })
       <p>
         {mode === 'demo'
           ? 'Демо обрабатывает ответы симуляцией на сервере без AI-вызовов.'
-          : 'В AI-режиме текст ответов и, по вашему выбору, аудио передаются OpenAI для обработки. У провайдера действуют собственные условия хранения данных.'}
+          : 'В AI-режиме текст ответов и, по вашему выбору, аудио передаются OpenAI для обработки. Если в базе нет подходящего инструмента, OpenAI ищет его в интернете по обобщённой задаче. У провайдера действуют собственные условия хранения данных.'}
       </p>
       <p>
         Мы не создаём аккаунт и не сохраняем ваши ответы в базе данных. Не сообщайте чувствительные

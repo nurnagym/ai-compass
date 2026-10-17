@@ -4,6 +4,7 @@ import { toolById } from '../../data/catalog'
 import { assets } from '../../data/assets'
 import { Button } from '../ui/button'
 import type { Recommendation } from '../../types/session'
+import { externalToolSchema } from '../../lib/externalTool'
 export function RecommendationCard({
   recommendation,
   index = 0,
@@ -11,8 +12,21 @@ export function RecommendationCard({
   recommendation: Recommendation
   index?: number
 }) {
-  const [feedback, setFeedback] = useState(''),
-    tool = toolById(recommendation.toolId)
+  const [feedback, setFeedback] = useState('')
+  const external = externalToolSchema.safeParse(recommendation.tool)
+  const metadata =
+    external.success && external.data.id === recommendation.toolId ? external.data : null
+  const tool = recommendation.tool
+    ? metadata && {
+        name: metadata.name,
+        officialUrl: metadata.officialUrl,
+        shortDescription: metadata.description,
+        category: recommendation.lifeArea === 'creativity' ? 'design' : 'everyday',
+        knownLimitations: metadata.limitations,
+        lastVerifiedDate: metadata.checkedAt.slice(0, 10),
+        verificationSource: metadata.sourceUrl,
+      }
+    : toolById(recommendation.toolId)
   if (!tool) return null
   const Icon =
     assets[
@@ -67,12 +81,24 @@ export function RecommendationCard({
           ))}
         </ul>
         <p>
-          Описание проверено {tool.lastVerifiedDate} по официальному источнику. Условия могут
-          меняться.
+          {metadata
+            ? `${metadata.source === 'sheet' ? 'Из базы инструментов. Данные загружены' : 'Найден в интернете. Источник получен'} ${tool.lastVerifiedDate}. Условия могут меняться.`
+            : `Описание проверено ${tool.lastVerifiedDate} по официальному источнику. Условия могут меняться.`}
         </p>
         <a href={tool.verificationSource} target="_blank" rel="noopener noreferrer">
           Источник описания <ArrowUpRight size={12} />
         </a>
+        {metadata?.contextSources.map((source) => (
+          <p key={`${source.url}:${source.row}`}>
+            <a
+              href={`${source.url}${source.url.includes('#') ? '&' : '#'}range=A${source.row}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Юзкейс или решение · строка {source.row} <ArrowUpRight size={12} />
+            </a>
+          </p>
+        ))}
       </details>
       <Button asChild className="try-tool">
         <a href={tool.officialUrl} target="_blank" rel="noopener noreferrer">

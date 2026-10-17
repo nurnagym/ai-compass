@@ -11,6 +11,7 @@
   },
   "observability": { "enabled": true },
   "vars": {
+    "SHEETS_ENABLED": "true",
     "AI_ENABLED": "true",
     "AI_MODEL": "gpt-6.1-sol",
     "AI_REASONING_EFFORT": "low",

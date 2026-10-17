@@ -191,4 +191,37 @@ describe('fixed component library', () => {
       expect(screen.getByRole('status')).toHaveTextContent('только в этой вкладке'),
     )
   })
+  it('renders an imported tool and its real official link without requiring a static catalog entry', () => {
+    render(
+      <RecommendationCard
+        recommendation={{
+          toolId: 'sheet-tool',
+          score: 60,
+          exploratory: true,
+          opportunity: 'Рабочий черновик',
+          why: 'Связь с вашим ответом',
+          firstAction: 'Попробуйте пример',
+          sourceIds: ['step-1'],
+          evidenceQuotes: ['тексты'],
+          tool: {
+            id: 'sheet-tool',
+            name: 'Imported Writer',
+            officialUrl: 'https://writer.example/',
+            description: 'Помогает с текстом',
+            source: 'sheet',
+            sourceUrl: 'https://docs.google.com/spreadsheets/d/source/edit',
+            checkedAt: '2026-10-17T00:00:00.000Z',
+            limitations: [],
+            contextSources: [],
+          },
+        }}
+      />,
+    )
+    expect(screen.getByRole('heading', { name: 'Imported Writer' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Попробовать инструмент/ })).toHaveAttribute(
+      'href',
+      'https://writer.example/',
+    )
+    expect(screen.getByText(/Из базы инструментов/)).toBeInTheDocument()
+  })
 })

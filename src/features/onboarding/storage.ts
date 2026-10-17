@@ -4,6 +4,8 @@ import { verifiedCatalog } from '../../data/catalog'
 import { MAX_STEPS, type Session } from '../../types/session'
 import { decide, introduction } from './director'
 import { initialSession } from './machine'
+import { resolvedRecommendationSchema } from '../../lib/externalTool'
+import { buildRecommendations } from '../evidence/scoring'
 
 export const SESSION_KEY = 'ai-compass.session.v1'
 const MAX_SNAPSHOT = 64000
@@ -17,6 +19,7 @@ const snapshotSchema = z
     question: questionSchema,
     claims: z.array(claimSchema).max(28),
     draft: z.string().max(1800),
+    resolvedRecommendations: z.array(resolvedRecommendationSchema).min(1).max(3).optional(),
   })
   .strict()
 
@@ -45,6 +48,25 @@ export function sanitizeSession(raw: unknown): StoredSession | null {
   const result = s.history.length
     ? decide(s.history, s.claims, { question: s.question }, s.mode)
     : null
+  if (s.resolvedRecommendations) {
+    if (!result || s.mode !== 'live' || s.phase !== 'RESULTS') return null
+    const targets = buildRecommendations(result.memory, s.history, true)
+    const saved = s.resolvedRecommendations
+    if (
+      targets.length !== saved.length ||
+      new Set(saved.map((r) => r.opportunityId)).size !== targets.length
+    )
+      return null
+    const recommendations = targets.map((target) => {
+      const data = saved.find((r) => r.opportunityId === target.opportunityId)
+      return data
+        ? { ...target, ...data, toolId: data.tool.id, firstAction: data.workflow[0] }
+        : null
+    })
+    if (recommendations.some((r) => !r)) return null
+    result.recommendations = recommendations.filter((r) => r !== null)
+    result.focus.candidateTools = result.recommendations.map((r) => r.toolId)
+  }
   // Recompute all scores and recommendations; cached browser values never become authority.
   const phase = s.phase === 'EVALUATING' ? 'ERROR' : s.phase
   const session: Session = {
@@ -111,6 +133,19 @@ export function saveSession(value: StoredSession) {
     question: value.session.question,
     claims,
     draft: value.draft,
+    ...(value.mode === 'live' &&
+    value.session.phase === 'RESULTS' &&
+    value.session.result?.recommendations.every((r) => r.tool)
+      ? {
+          resolvedRecommendations: value.session.result.recommendations.map((r) => ({
+            opportunityId: r.opportunityId,
+            opportunity: r.opportunity,
+            why: r.why,
+            workflow: r.workflow,
+            tool: r.tool,
+          })),
+        }
+      : {}),
   }
   try {
     const text = JSON.stringify(snapshot)

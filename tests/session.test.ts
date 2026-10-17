@@ -82,3 +82,50 @@ describe('bounded current-tab session restoration', () => {
     ).not.toThrow()
   })
 })
+
+it('restores external official links and workflows while recalculating readiness from evidence', async () => {
+  const { decide } = await import('../src/features/onboarding/director')
+  const { buildRecommendations } = await import('../src/features/evidence/scoring')
+  const history: Interaction[] = Array.from({ length: 7 }, (_, i) => ({
+    ...answer,
+    id: `step-${i + 1}`,
+    question: { ...introduction, id: i ? `q-${i}` : 'intro' },
+    answer: i ? '' : 'Работаю с текстами',
+    skipped: !!i,
+  }))
+  const result = decide(history, [], undefined, 'live')
+  result.recommendations = buildRecommendations(result.memory, history, true).map((r, i) => ({
+    ...r,
+    toolId: `external-${i}`,
+    workflow: ['Создайте пример.', 'Проверьте результат.'],
+    tool: {
+      id: `external-${i}`,
+      name: 'External Writer',
+      officialUrl: 'https://writer.example/',
+      description: 'Помощник',
+      source: 'web',
+      sourceUrl: 'https://writer.example/features',
+      checkedAt: '2026-10-17T00:00:00.000Z',
+      limitations: [],
+      contextSources: [],
+    },
+  }))
+  saveSession({
+    mode: 'live',
+    timerEnabled: true,
+    draft: '',
+    session: { phase: 'RESULTS', history, question: history.at(-1)!.question, result, error: null },
+  })
+  const restored = readSession()
+  expect(restored?.session.phase).toBe('RESULTS')
+  expect(restored?.session.result?.recommendations.map((r) => r.tool?.officialUrl)).toEqual(
+    result.recommendations.map(() => 'https://writer.example/'),
+  )
+  expect(
+    restored?.session.result?.recommendations.every((r) => r.score < 100 && r.exploratory),
+  ).toBe(true)
+  const raw = JSON.parse(sessionStorage.getItem(SESSION_KEY)!)
+  raw.resolvedRecommendations[0].tool.officialUrl = 'javascript:alert(1)'
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(raw))
+  expect(readSession()).toBeNull()
+})

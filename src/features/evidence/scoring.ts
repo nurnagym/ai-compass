@@ -12,7 +12,7 @@ import {
   type Recommendation,
 } from '../../types/session'
 import { areaNames, claimArea, independentSourceIds, normalized } from '../onboarding/lifeAreas'
-import { evaluateTool } from './evaluator'
+import { evaluateTool, domainNames } from './evaluator'
 
 const supportedSignals = (memory: Memory) => [
   ...memory.confirmedFacts,
@@ -178,9 +178,30 @@ function areaMemory(memory: Memory, area: Opportunity['lifeArea']): Memory {
   }
 }
 
-export function buildRecommendations(memory: Memory, history: Interaction[]): Recommendation[] {
+export function buildRecommendations(
+  memory: Memory,
+  history: Interaction[],
+  external = false,
+): Recommendation[] {
   const coverage = calculateCoverage(memory, history)
-  const candidates = opportunities
+  const available = [...opportunities]
+  if (external) {
+    // A source-backed opportunity may concern data, presentations or another domain
+    // absent from the small demo catalog. Its scope still needs actual cited evidence.
+    for (const signal of supportedSignals(memory).filter((c) => !c.negative)) {
+      const area = claimArea(signal)
+      if (available.some((o) => o.lifeArea === area && o.domain === signal.domain)) continue
+      available.push({
+        id: `external:${area}:${signal.domain}`,
+        lifeArea: area,
+        domain: signal.domain,
+        title: `Попробовать AI для ${domainNames[signal.domain]} в сфере ${areaNames[area]}`,
+        toolIds: [],
+        workflow: [],
+      })
+    }
+  }
+  const candidates = available
     .flatMap((opportunity) => {
       const scoped = areaMemory(memory, opportunity.lifeArea)
       if (supportedSignals(scoped).some((c) => c.negative && c.domain === opportunity.domain))
@@ -195,7 +216,8 @@ export function buildRecommendations(memory: Memory, history: Interaction[]): Re
           return result ? [result] : []
         })
         .sort((a, b) => b.score - a.score)
-      const tool = compatible[0]
+      // External selection starts from the person's opportunities, not the desktop demo catalog.
+      const tool = external ? { toolId: 'pending', exploratory: false } : compatible[0]
       if (!tool) return []
       const signals = signalsFor(opportunity, memory, history)
       const sourceIds = [...new Set(signals.map((c) => c.sourceId))]
@@ -212,7 +234,7 @@ export function buildRecommendations(memory: Memory, history: Interaction[]): Re
           sourceIds,
           evidenceQuotes: signals.slice(0, 3).map((c) => c.quote),
           workflow: opportunity.workflow,
-          firstAction: opportunity.workflow[0],
+          firstAction: opportunity.workflow[0] ?? 'Выберите небольшой пример для пробы.',
           why: signals.length
             ? `Вы рассказали: «${signals[0].quote}». Это повод попробовать сценарий для ${areaNames[opportunity.lifeArea]}.`
             : 'Для этого сценария пока мало сведений. Это осторожная идея для пробы, а не вывод о вашей потребности.',

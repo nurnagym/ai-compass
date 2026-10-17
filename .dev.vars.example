@@ -5,3 +5,11 @@ COMPASS_API_KEY=
 AI_MODEL=gpt-6.1-sol
 AI_REASONING_EFFORT=low
 TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
+SHEETS_ENABLED=true
+# Blank selects the first tab; set the gid from a tab's URL for a specific tab.
+KNOWLEDGE_1_GID=
+KNOWLEDGE_2_GID=
+TOOLS_GID=
+# Optional: exact header names when automatic aliases do not match the tools sheet.
+# TOOL_NAME_COLUMN=Name
+# TOOL_URL_COLUMN=Website

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 const mocks = vi.hoisted(() => ({ parse: vi.fn(), transcribe: vi.fn() }))
 vi.mock('openai', async (importOriginal) => ({
   ...(await importOriginal<typeof import('openai')>()),
@@ -11,6 +11,7 @@ vi.mock('openai', async (importOriginal) => ({
 import { APIError, APIConnectionTimeoutError } from 'openai'
 import worker, { boundedBody, type Env } from '../worker/index'
 import { introduction } from '../src/features/onboarding/director'
+import { sourceIds } from '../worker/sources'
 const env: Env = {
   AI_ENABLED: 'true',
   COMPASS_API_KEY: 'unit-test-not-a-real-key',
@@ -34,7 +35,183 @@ const turnReq = (session: unknown, answer: unknown = history[0]) =>
 beforeEach(() => {
   vi.clearAllMocks()
 })
+afterEach(() => vi.unstubAllGlobals())
 describe('Worker API contracts and cost guards', () => {
+  it('resolves a final live turn with catalog priority, grounded search and a limiter check per provider request', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockImplementation(
+          async (url: string) =>
+            new Response(
+              url.includes(sourceIds[2])
+                ? 'Name,Website,Capabilities\nFixture Writer,https://writer.example,Writing and research'
+                : 'Case,Solution\nWriting,Drafting',
+            ),
+        ),
+    )
+    const limit = vi.fn().mockResolvedValue({ success: true })
+    mocks.parse.mockImplementation(
+      async (request: { input: string; text: { format: { name: string } } }) => {
+        const input = JSON.parse(request.input)
+        if (request.text.format.name === 'onboarding_director')
+          return { output_parsed: { signals: [], hypotheses: [], candidateQuestions: [] } }
+        if (request.text.format.name === 'catalog_selection')
+          return {
+            output_parsed: {
+              selections: input.targets
+                .map((t: { index: number; opportunity: string }) => ({
+                  ...t,
+                  toolId: t.index === 0 ? null : input.tools[0].id,
+                  reason: 'Помогает попробовать этот сценарий.',
+                  workflow: ['Создайте пример.', 'Проверьте результат.'],
+                  contextRowIds: [],
+                }))
+                .map(
+                  (t: {
+                    index: number
+                    opportunity: string
+                    toolId: string | null
+                    reason: string
+                    workflow: string[]
+                    contextRowIds: string[]
+                  }) => ({
+                    index: t.index,
+                    opportunity: t.opportunity,
+                    toolId: t.toolId,
+                    reason: t.reason,
+                    workflow: t.workflow,
+                    contextRowIds: t.contextRowIds,
+                  }),
+                ),
+            },
+          }
+        return {
+          status: 'completed',
+          output_parsed: {
+            tools: [
+              {
+                index: 0,
+                name: 'Web Writer',
+                officialUrl: 'https://found.example/',
+                sourceUrl: 'https://found.example/features',
+                description: 'Помощник',
+                reason: 'Поддерживает нужный сценарий.',
+                workflow: ['Создайте пример.', 'Проверьте результат.'],
+                limitations: [],
+              },
+            ],
+          },
+          output: [
+            {
+              type: 'web_search_call',
+              status: 'completed',
+              action: {
+                type: 'search',
+                sources: [{ type: 'url', url: 'https://found.example/features' }],
+              },
+            },
+          ],
+        }
+      },
+    )
+    const full = Array.from({ length: 7 }, (_, i) => ({
+      ...history[0],
+      id: `step-${i + 1}`,
+      question: { ...introduction, id: i ? `q-${i}` : 'intro' },
+      answer: i ? '' : 'Работаю с текстами',
+      skipped: !!i,
+    }))
+    const r = await worker.fetch(
+      turnReq({ version: 1, mode: 'live', history: full.slice(0, 6) }, full[6]),
+      { ...env, AI_RATE_LIMITER: { limit }, SHEETS_ENABLED: 'true', TOOLS_GID: '125' },
+    )
+    expect(r.status).toBe(200)
+    const data = (await r.json()) as {
+      action: { type: string; recommendations: { tool: { source: string; officialUrl: string } }[] }
+    }
+    expect(data.action.type).toBe('results')
+    expect(data.action.recommendations.map((r) => r.tool.source)).toEqual(['web', 'sheet'])
+    expect(data.action.recommendations[0].tool.officialUrl).toBe('https://found.example/')
+    expect(mocks.parse).toHaveBeenCalledTimes(3)
+    expect(limit).toHaveBeenCalledTimes(3)
+  })
+  it('exposes source readiness and row counts without a paid model request', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockImplementation(
+          async (url: string) =>
+            new Response(
+              url.includes(sourceIds[2])
+                ? 'Name,Website\nWriter,https://writer.example'
+                : 'Case\nWriting',
+            ),
+        ),
+    )
+    const r = await worker.fetch(new Request('https://compass.example/api/sources'), {
+      ...env,
+      SHEETS_ENABLED: 'true',
+      TOOLS_GID: '126',
+    })
+    expect(r.status).toBe(200)
+    expect(await r.json()).toMatchObject({
+      enabled: true,
+      ready: true,
+      sources: [
+        { role: 'use_cases', rows: 1 },
+        { role: 'possible_solutions', rows: 1 },
+        { role: 'tools', rows: 1 },
+      ],
+    })
+    expect(mocks.parse).not.toHaveBeenCalled()
+  })
+  it('uses cases and solutions from configured sheets during live question generation', async () => {
+    const fetch = vi
+      .fn()
+      .mockImplementation(
+        async (url: string) =>
+          new Response(
+            url.includes(sourceIds[2])
+              ? 'Name,Website\nFixture Writer,https://writer.example'
+              : 'Case,Solution\nУчебные материалы,Объяснение темы',
+          ),
+      )
+    vi.stubGlobal('fetch', fetch)
+    mocks.parse.mockResolvedValue({
+      output_parsed: { signals: [], hypotheses: [], candidateQuestions: [] },
+    })
+    const r = await worker.fetch(req({ mode: 'live', history }), {
+      ...env,
+      SHEETS_ENABLED: 'true',
+      TOOLS_GID: '123',
+    })
+    expect(r.status).toBe(200)
+    expect(fetch).toHaveBeenCalledTimes(3)
+    const input = JSON.parse(mocks.parse.mock.calls[0][0].input)
+    expect(input.knowledgeSources.map((s: { role: string }) => s.role)).toEqual([
+      'use_cases',
+      'possible_solutions',
+    ])
+    expect(input.knowledgeSources[0].rows[0].values.Case).toBe('Учебные материалы')
+    expect(mocks.parse).toHaveBeenCalledTimes(1)
+  })
+  it('reports source access failure before starting a paid model call', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('private sheet', { status: 403 })),
+    )
+    const r = await worker.fetch(req({ mode: 'live', history }), {
+      ...env,
+      SHEETS_ENABLED: 'true',
+      TOOLS_GID: '124',
+    })
+    expect(r.status).toBe(503)
+    expect(await r.json()).toMatchObject({ errorCode: 'DATA_SOURCES_UNAVAILABLE' })
+    expect(mocks.parse).not.toHaveBeenCalled()
+  })
   it('reports demo availability without leaking key or configuration', async () => {
     const r = await worker.fetch(new Request('https://compass.example/api/status'), env)
     expect(await r.json()).toEqual({ aiEnabled: true, demo: true })
