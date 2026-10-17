@@ -12,6 +12,81 @@ import {
 import { website } from '../src/lib/website'
 afterEach(() => vi.unstubAllGlobals())
 describe('three spreadsheet sources', () => {
+  it('accepts the actual tools-table columns without inventing missing websites', () => {
+    const sheet = parseSheet(
+      '№,Инструмент,Категория,Уровень,Назначение\n1,ChatGPT,Универсальные ассистенты,S,Текст и анализ файлов\n2,Claude,Универсальные ассистенты,S,Работа с документами',
+      sourceIds[2],
+      '',
+    )
+    expect(
+      parseTools(sheet, {}).map((t) => ({ name: t.name, officialUrl: t.officialUrl })),
+    ).toEqual([
+      { name: 'ChatGPT', officialUrl: null },
+      { name: 'Claude', officialUrl: null },
+    ])
+  })
+  it('follows bounded redirects to Google download hosts', async () => {
+    const fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes(sourceIds[2]))
+        return new Response(null, {
+          status: 302,
+          headers: { Location: 'https://doc-download.googleusercontent.com/sheet.csv' },
+        })
+      return new Response(
+        url.includes('googleusercontent.com') ? 'Инструмент\nChatGPT' : 'Case\nWriting',
+      )
+    })
+    vi.stubGlobal('fetch', fetch)
+    const sources = await loadSources({ TOOLS_GID: '910' })
+    expect(sources.tools).toHaveLength(1)
+    expect(fetch).toHaveBeenCalledTimes(4)
+    expect(fetch.mock.calls.at(-1)![0]).toBe('https://doc-download.googleusercontent.com/sheet.csv')
+  })
+  it.each([
+    ['https://accounts.google.com/ServiceLogin', 'access_denied'],
+    ['https://untrusted.example/download', 'redirect_blocked'],
+    ['http://docs.google.com/download', 'redirect_blocked'],
+  ])('diagnoses and rejects redirect to %s without following it', async (location, reason) => {
+    const fetch = vi
+      .fn()
+      .mockImplementation(async (url: string) =>
+        url.includes(sourceIds[2])
+          ? new Response(null, { status: 302, headers: { Location: location } })
+          : new Response('Case\nWriting'),
+      )
+    vi.stubGlobal('fetch', fetch)
+    await expect(loadSources({ TOOLS_GID: '911' })).rejects.toMatchObject({
+      code: 'DATA_SOURCES_UNAVAILABLE',
+      sources: [
+        { role: 'use_cases', ready: true },
+        { role: 'possible_solutions', ready: true },
+        { role: 'tools', ready: false, reason, httpStatus: 302 },
+      ],
+    })
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+  it('reports each source independently without disclosing provider pages or raw errors', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (url: string) => {
+        if (url.includes(sourceIds[0])) return new Response('private sign-in page', { status: 401 })
+        if (url.includes(sourceIds[1])) throw new Error('private credentials')
+        return new Response('Инструмент\nChatGPT')
+      }),
+    )
+    try {
+      await loadSources({ TOOLS_GID: '912' })
+      expect.unreachable()
+    } catch (error) {
+      expect(error).toBeInstanceOf(SourceError)
+      expect((error as SourceError).sources).toMatchObject([
+        { role: 'use_cases', ready: false, reason: 'access_denied', httpStatus: 401 },
+        { role: 'possible_solutions', ready: false, reason: 'network_error' },
+        { role: 'tools', ready: true, rows: 1, toolsWithWebsite: 0, toolsNeedingWebsite: 1 },
+      ])
+      expect(JSON.stringify((error as SourceError).sources)).not.toContain('private')
+    }
+  })
   it('preserves quoted commas, newlines, quotes, BOM and source row numbers', () => {
     const csv =
       '\uFEFFНазвание,Сайт,Описание\r\nTool,https://tool.example,"Text, first\nsecond ""quote"""\r\n\r\nNext,https://next.example,Other'

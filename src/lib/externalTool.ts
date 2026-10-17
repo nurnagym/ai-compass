@@ -9,6 +9,7 @@ export const externalToolSchema = z
     description: z.string().max(500),
     source: z.enum(['sheet', 'web']),
     sourceUrl: websiteSchema,
+    websiteSourceUrl: websiteSchema.optional(),
     checkedAt: z.iso.datetime(),
     limitations: z.array(z.string().max(300)).max(5),
     contextSources: z

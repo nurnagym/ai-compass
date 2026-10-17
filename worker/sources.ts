@@ -14,9 +14,37 @@ export interface SourceConfig {
   TOOL_URL_COLUMN?: string
 }
 export class SourceError extends Error {
-  constructor(public code: 'DATA_SOURCES_UNAVAILABLE' | 'DATA_SOURCE_INVALID') {
+  constructor(
+    public code: 'DATA_SOURCES_UNAVAILABLE' | 'DATA_SOURCE_INVALID',
+    public reason: SourceFailureReason = code === 'DATA_SOURCE_INVALID'
+      ? 'invalid_table'
+      : 'network_error',
+    public httpStatus?: number,
+    public sources?: SourceStatus[],
+  ) {
     super(code)
   }
+}
+export type SourceFailureReason =
+  | 'access_denied'
+  | 'not_found'
+  | 'http_error'
+  | 'unexpected_html'
+  | 'network_error'
+  | 'timeout'
+  | 'redirect_blocked'
+  | 'invalid_table'
+  | 'invalid_configuration'
+export interface SourceStatus {
+  role: 'use_cases' | 'possible_solutions' | 'tools'
+  url: string
+  ready: boolean
+  rows?: number
+  toolsWithWebsite?: number
+  toolsNeedingWebsite?: number
+  errorCode?: SourceError['code']
+  reason?: SourceFailureReason
+  httpStatus?: number
 }
 export interface SourceRow {
   id: string
@@ -31,7 +59,7 @@ export interface Sheet {
 export interface SheetTool {
   id: string
   name: string
-  officialUrl: string
+  officialUrl: string | null
   row: SourceRow
   sourceUrl: string
 }
@@ -137,11 +165,14 @@ export function parseTools(sheet: Sheet, config: SourceConfig): SheetTool[] {
       'ссылканасайт',
       'ссылканаинструмент',
     ]) ?? find(config.TOOL_URL_COLUMN, ['url', 'link', 'toolurl', 'toollink', 'ссылка'])
-  if (!name || !url) throw invalid()
+  if (!name) throw invalid()
   return sheet.rows.map((row) => {
-    const rawUrl = row.values[url]
-    const officialUrl = website(/^www\./i.test(rawUrl) ? `https://${rawUrl}` : rawUrl)
-    if (!officialUrl || !row.values[name] || row.values[name].length > 120) throw invalid()
+    const rawUrl = url ? row.values[url] : ''
+    const officialUrl = rawUrl
+      ? website(/^www\./i.test(rawUrl) ? `https://${rawUrl}` : rawUrl)
+      : null
+    if ((rawUrl && !officialUrl) || !row.values[name] || row.values[name].length > 120)
+      throw invalid()
     return {
       id: row.id,
       name: row.values[name],
@@ -152,21 +183,59 @@ export function parseTools(sheet: Sheet, config: SourceConfig): SheetTool[] {
   })
 }
 async function readSheet(id: string, gid: string): Promise<Sheet> {
-  if (gid && !/^\d+$/.test(gid)) throw invalid()
+  if (gid && !/^\d+$/.test(gid))
+    throw new SourceError('DATA_SOURCE_INVALID', 'invalid_configuration')
   const abort = new AbortController(),
     timeout = setTimeout(() => abort.abort(), 10000)
   try {
-    const response = await fetch(
+    let url = new URL(
       `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv${gid ? `&gid=${gid}` : ''}`,
-      {
-        signal: abort.signal,
-        redirect: 'error',
-        headers: { Accept: 'text/csv' },
-      },
     )
-    if (!response.ok || !response.body || /html/i.test(response.headers.get('Content-Type') ?? ''))
-      throw new SourceError('DATA_SOURCES_UNAVAILABLE')
-    const reader = response.body.getReader()
+    let response: Response | undefined
+    for (let redirects = 0; redirects <= 3; redirects++) {
+      response = await fetch(url.href, {
+        signal: abort.signal,
+        redirect: 'manual',
+        headers: { Accept: 'text/csv' },
+      })
+      if (![301, 302, 303, 307, 308].includes(response.status)) break
+      const location = response.headers.get('Location')
+      const status = response.status
+      await response.body?.cancel()
+      if (!location) throw new SourceError('DATA_SOURCES_UNAVAILABLE', 'redirect_blocked', status)
+      const next = new URL(location, url)
+      if (next.hostname === 'accounts.google.com')
+        throw new SourceError('DATA_SOURCES_UNAVAILABLE', 'access_denied', status)
+      if (
+        redirects === 3 ||
+        next.protocol !== 'https:' ||
+        next.username ||
+        next.password ||
+        next.port ||
+        !(next.hostname === 'docs.google.com' || next.hostname.endsWith('.googleusercontent.com'))
+      )
+        throw new SourceError('DATA_SOURCES_UNAVAILABLE', 'redirect_blocked', status)
+      url = next
+    }
+    if (!response!.ok) {
+      const status = response!.status
+      await response!.body?.cancel()
+      throw new SourceError(
+        'DATA_SOURCES_UNAVAILABLE',
+        status === 401 || status === 403
+          ? 'access_denied'
+          : status === 404
+            ? 'not_found'
+            : 'http_error',
+        status,
+      )
+    }
+    if (!response!.body) throw new SourceError('DATA_SOURCES_UNAVAILABLE', 'network_error')
+    if (/html/i.test(response!.headers.get('Content-Type') ?? '')) {
+      await response!.body.cancel()
+      throw new SourceError('DATA_SOURCES_UNAVAILABLE', 'unexpected_html', response!.status)
+    }
+    const reader = response!.body.getReader()
     const decoder = new TextDecoder()
     let csv = '',
       size = 0
@@ -188,7 +257,10 @@ async function readSheet(id: string, gid: string): Promise<Sheet> {
     return parseSheet(csv, id, gid)
   } catch (error) {
     if (error instanceof SourceError) throw error
-    throw new SourceError('DATA_SOURCES_UNAVAILABLE')
+    throw new SourceError(
+      'DATA_SOURCES_UNAVAILABLE',
+      abort.signal.aborted ? 'timeout' : 'network_error',
+    )
   } finally {
     clearTimeout(timeout)
   }
@@ -198,12 +270,49 @@ export function loadSources(config: SourceConfig): Promise<Sources> {
   const gids = [config.KNOWLEDGE_1_GID ?? '', config.KNOWLEDGE_2_GID ?? '', config.TOOLS_GID ?? '']
   const cacheKey = JSON.stringify([gids, config.TOOL_NAME_COLUMN, config.TOOL_URL_COLUMN])
   if (cached?.key === cacheKey && cached.until > Date.now()) return cached.value
-  const value = Promise.all(sourceIds.map((id, i) => readSheet(id, gids[i]))).then((sheets) => ({
-    knowledge: sheets.slice(0, 2),
-    toolsSheet: sheets[2],
-    tools: parseTools(sheets[2], config),
-    loadedAt: new Date().toISOString(),
-  }))
+  const value = Promise.allSettled(
+    sourceIds.map(async (id, i) => {
+      const sheet = await readSheet(id, gids[i])
+      return { sheet, tools: i === 2 ? parseTools(sheet, config) : [] }
+    }),
+  ).then((results) => {
+    const statuses: SourceStatus[] = results.map((r, i) => ({
+      role: i === 0 ? 'use_cases' : i === 1 ? 'possible_solutions' : 'tools',
+      url: `https://docs.google.com/spreadsheets/d/${sourceIds[i]}/edit${gids[i] ? `#gid=${gids[i]}` : ''}`,
+      ...(r.status === 'fulfilled'
+        ? {
+            ready: true,
+            rows: r.value.sheet.rows.length,
+            ...(i === 2
+              ? {
+                  toolsWithWebsite: r.value.tools.filter((t) => t.officialUrl).length,
+                  toolsNeedingWebsite: r.value.tools.filter((t) => !t.officialUrl).length,
+                }
+              : {}),
+          }
+        : {
+            ready: false,
+            errorCode: r.reason instanceof SourceError ? r.reason.code : 'DATA_SOURCES_UNAVAILABLE',
+            reason: r.reason instanceof SourceError ? r.reason.reason : 'network_error',
+            ...(r.reason instanceof SourceError && r.reason.httpStatus
+              ? { httpStatus: r.reason.httpStatus }
+              : {}),
+          }),
+    }))
+    const failed = statuses.find((s) => !s.ready)
+    if (failed)
+      throw new SourceError(failed.errorCode!, failed.reason!, failed.httpStatus, statuses)
+    const data = results.map((r) => {
+      if (r.status !== 'fulfilled') throw invalid()
+      return r.value
+    })
+    return {
+      knowledge: data.slice(0, 2).map((d) => d.sheet),
+      toolsSheet: data[2].sheet,
+      tools: data[2].tools,
+      loadedAt: new Date().toISOString(),
+    }
+  })
   const entry = { key: cacheKey, until: Date.now() + 5 * 60 * 1000, value }
   cached = entry
   void value.catch(() => {

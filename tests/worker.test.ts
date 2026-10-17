@@ -37,6 +37,62 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 describe('Worker API contracts and cost guards', () => {
+  it('accepts a tools database with names but no website column and reports pending lookups', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockImplementation(
+          async (url: string) =>
+            new Response(
+              url.includes(sourceIds[2])
+                ? '№,Инструмент,Категория,Уровень,Назначение\n1,ChatGPT,Ассистенты,S,Работа с текстом'
+                : 'ID,Domain,AI Use Case\n1,Education,Explain a concept',
+            ),
+        ),
+    )
+    const r = await worker.fetch(new Request('https://compass.example/api/sources'), {
+      ...env,
+      SHEETS_ENABLED: 'true',
+      TOOLS_GID: '127',
+    })
+    expect(r.status).toBe(200)
+    expect(await r.json()).toMatchObject({
+      ready: true,
+      sources: [
+        { role: 'use_cases', ready: true },
+        { role: 'possible_solutions', ready: true },
+        { role: 'tools', ready: true, rows: 1, toolsWithWebsite: 0, toolsNeedingWebsite: 1 },
+      ],
+    })
+    expect(mocks.parse).not.toHaveBeenCalled()
+  })
+  it('identifies a failing source and its HTTP status without exposing the Google error page', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (url: string) => {
+        if (url.includes(sourceIds[1])) return new Response('private sign-in data', { status: 401 })
+        return new Response(url.includes(sourceIds[2]) ? 'Инструмент\nChatGPT' : 'Case\nWriting')
+      }),
+    )
+    const r = await worker.fetch(new Request('https://compass.example/api/sources'), {
+      ...env,
+      SHEETS_ENABLED: 'true',
+      TOOLS_GID: '128',
+    })
+    expect(r.status).toBe(503)
+    const data = await r.json()
+    expect(data).toMatchObject({
+      ready: false,
+      errorCode: 'DATA_SOURCES_UNAVAILABLE',
+      sources: [
+        { role: 'use_cases', ready: true },
+        { role: 'possible_solutions', ready: false, reason: 'access_denied', httpStatus: 401 },
+        { role: 'tools', ready: true },
+      ],
+    })
+    expect(JSON.stringify(data)).not.toContain('private')
+  })
   it('resolves a final live turn with catalog priority, grounded search and a limiter check per provider request', async () => {
     vi.stubGlobal(
       'fetch',

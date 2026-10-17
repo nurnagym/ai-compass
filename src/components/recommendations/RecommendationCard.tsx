@@ -88,6 +88,13 @@ export function RecommendationCard({
         <a href={tool.verificationSource} target="_blank" rel="noopener noreferrer">
           Источник описания <ArrowUpRight size={12} />
         </a>
+        {metadata?.websiteSourceUrl && (
+          <p>
+            <a href={metadata.websiteSourceUrl} target="_blank" rel="noopener noreferrer">
+              Официальный сайт подтверждён поиском <ArrowUpRight size={12} />
+            </a>
+          </p>
+        )}
         {metadata?.contextSources.map((source) => (
           <p key={`${source.url}:${source.row}`}>
             <a

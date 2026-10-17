@@ -32,6 +32,7 @@ test('external catalog and search cards retain official websites after reload', 
             sourceUrl: i
               ? `https://writer${i}.example/features`
               : 'https://docs.google.com/spreadsheets/d/test/edit',
+            ...(i === 0 ? { websiteSourceUrl: 'https://writer0.example/features' } : {}),
             checkedAt: '2026-10-17T00:00:00.000Z',
             limitations: ['Проверьте условия на сайте.'],
             contextSources: [],
@@ -61,6 +62,10 @@ test('external catalog and search cards retain official websites after reload', 
   const links = page.getByRole('link', { name: /Попробовать инструмент/ })
   await expect(links.nth(0)).toHaveAttribute('href', 'https://writer0.example/')
   await expect(links.nth(1)).toHaveAttribute('href', 'https://writer1.example/')
+  await page.locator('.recommendation-card').first().locator('summary').click()
+  await expect(
+    page.getByRole('link', { name: /Официальный сайт подтверждён поиском/ }),
+  ).toHaveAttribute('href', 'https://writer0.example/features')
   const requests = turns
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Database Writer', exact: true })).toBeVisible()

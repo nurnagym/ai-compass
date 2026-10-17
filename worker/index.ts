@@ -318,16 +318,30 @@ export default {
           sources: [
             ...sources.knowledge.map((s, i) => ({
               role: i === 0 ? 'use_cases' : 'possible_solutions',
+              ready: true,
               url: s.url,
               rows: s.rows.length,
             })),
-            { role: 'tools', url: sources.toolsSheet.url, rows: sources.tools.length },
+            {
+              role: 'tools',
+              ready: true,
+              url: sources.toolsSheet.url,
+              rows: sources.tools.length,
+              toolsWithWebsite: sources.tools.filter((t) => t.officialUrl).length,
+              toolsNeedingWebsite: sources.tools.filter((t) => !t.officialUrl).length,
+            },
           ],
         })
       } catch (error) {
         const failure = providerFailure(error)
         return json(
-          { enabled: true, ready: false, errorCode: failure.code, error: failure.message },
+          {
+            enabled: true,
+            ready: false,
+            errorCode: failure.code,
+            error: failure.message,
+            ...(error instanceof SourceError && error.sources ? { sources: error.sources } : {}),
+          },
           failure.status,
         )
       }

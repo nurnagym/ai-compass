@@ -132,6 +132,7 @@ export interface ExternalTool {
   description: string
   source: 'sheet' | 'web'
   sourceUrl: string
+  websiteSourceUrl?: string
   checkedAt: string
   limitations: string[]
   contextSources: { url: string; row: number }[]

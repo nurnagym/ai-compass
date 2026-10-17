@@ -71,6 +71,58 @@ const run = (parse: ReturnType<typeof vi.fn>, charge = vi.fn().mockResolvedValue
   )
 
 describe('catalog first, live web search only for a database miss', () => {
+  it('looks up the website of a selected database tool without treating it as a missing tool', async () => {
+    const noLinks = { ...sources, tools: sources.tools.map((t) => ({ ...t, officialUrl: null })) }
+    const tools = targets.map((_, index) => ({ ...webTool, index, name: 'Test Writer' }))
+    const parse = vi
+      .fn()
+      .mockResolvedValueOnce({ output_parsed: { selections: selections() } })
+      .mockResolvedValueOnce({ ...webResult(), output_parsed: { tools } })
+    const resolved = await resolveRecommendations(
+      result,
+      history,
+      noLinks,
+      { responses: { parse } } as unknown as OpenAI,
+      'model',
+      async () => {},
+      AbortSignal.timeout(1000),
+    )
+    expect(
+      JSON.parse(parse.mock.calls[1][0].input).tasks.every(
+        (t: { mode: string; selectedTool: { name: string } }) =>
+          t.mode === 'official_site' && t.selectedTool.name === 'Test Writer',
+      ),
+    ).toBe(true)
+    expect(
+      resolved.recommendations.every(
+        (r) => r.toolId === sources.tools[0].id && r.tool?.source === 'sheet',
+      ),
+    ).toBe(true)
+    expect(resolved.recommendations[0].tool).toMatchObject({
+      name: 'Test Writer',
+      officialUrl: 'https://found.example/',
+      sourceUrl: sources.tools[0].sourceUrl,
+      websiteSourceUrl: webTool.sourceUrl,
+    })
+  })
+  it('does not let a website lookup silently replace the selected database tool', async () => {
+    const noLinks = { ...sources, tools: sources.tools.map((t) => ({ ...t, officialUrl: null })) }
+    const parse = vi
+      .fn()
+      .mockResolvedValueOnce({ output_parsed: { selections: selections() } })
+      .mockResolvedValueOnce(webResult())
+    await expect(
+      resolveRecommendations(
+        result,
+        history,
+        noLinks,
+        { responses: { parse } } as unknown as OpenAI,
+        'model',
+        async () => {},
+        AbortSignal.timeout(1000),
+      ),
+    ).rejects.toThrow('AI_RESPONSE_INVALID')
+  })
   it('creates evidenced data opportunities even when that scenario has no demo tool mapping', () => {
     const turns = history.map((h, i) =>
       i ? h : { ...h, answer: 'Работаю с данными и таблицами Excel' },
