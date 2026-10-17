@@ -1832,3 +1832,13 @@ textarea::placeholder {
     font-size: 10px;
   }
 }
+
+.first-action > ol {
+  padding-left: 1.25rem;
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.first-action li + li {
+  margin-top: 8px;
+}

@@ -25,6 +25,12 @@ const req = (body: unknown, headers: Record<string, string> = {}) =>
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   })
+const turnReq = (session: unknown, answer: unknown = history[0]) =>
+  new Request('https://compass.example/api/turn', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session, answer }),
+  })
 beforeEach(() => {
   vi.clearAllMocks()
 })
@@ -39,6 +45,97 @@ describe('Worker API contracts and cost guards', () => {
     expect(r.status).toBe(200)
     expect(((await r.json()) as { question: unknown }).question).toBeTruthy()
     expect(mocks.parse).not.toHaveBeenCalled()
+  })
+  it('implements the turn contract and recomputes untrusted cached results', async () => {
+    const r = await worker.fetch(
+      turnReq({
+        version: 1,
+        mode: 'demo',
+        history: [],
+        result: { action: 'RECOMMEND', score: 100 },
+      }),
+      {},
+    )
+    expect(r.status).toBe(200)
+    const data = (await r.json()) as {
+      session: { history: unknown[]; result: { recommendations: unknown[] } }
+      action: { type: string; question: unknown }
+    }
+    expect(data.action.type).toBe('question')
+    expect(data.session.history).toEqual(history)
+    expect(data.session.result.recommendations).toEqual([])
+    expect(mocks.parse).not.toHaveBeenCalled()
+  })
+  it('validates version, history limits and required first answers at the turn boundary', async () => {
+    for (const session of [
+      { version: 99, mode: 'demo', history: [] },
+      { version: 1, mode: 'demo', history: Array(7).fill(history[0]) },
+    ])
+      expect((await worker.fetch(turnReq(session), {})).status).toBe(400)
+    expect(
+      (
+        await worker.fetch(
+          turnReq(
+            { version: 1, mode: 'demo', history: [] },
+            { ...history[0], answer: '', skipped: true },
+          ),
+          {},
+        )
+      ).status,
+    ).toBe(400)
+    expect(mocks.parse).not.toHaveBeenCalled()
+  })
+  it('uses one provider call for a live turn and safely fills missing model candidates', async () => {
+    mocks.parse.mockResolvedValue({
+      output_parsed: { signals: [], hypotheses: [], candidateQuestions: [] },
+    })
+    const r = await worker.fetch(turnReq({ version: 1, mode: 'live', history: [] }), env)
+    expect(r.status).toBe(200)
+    expect(await r.json()).toMatchObject({
+      action: { type: 'question' },
+      session: { result: { mode: 'live', action: 'EXPLORE' } },
+    })
+    expect(mocks.parse).toHaveBeenCalledTimes(1)
+  })
+  it('retains cited semantic signals across turns while discarding forged cached evidence', async () => {
+    const first = { ...history[0], answer: 'По вечерам сочиняю строфы' }
+    const signal = {
+      kind: 'fact',
+      text: 'Пишет стихи',
+      quote: first.answer,
+      sourceId: first.id,
+      domain: 'writing',
+      lifeArea: 'creativity',
+      negative: false,
+      toolId: null,
+      confidence: 0.7,
+    }
+    mocks.parse.mockResolvedValue({
+      output_parsed: { signals: [], hypotheses: [], candidateQuestions: [] },
+    })
+    const r = await worker.fetch(
+      turnReq(
+        {
+          version: 1,
+          mode: 'live',
+          history: [first],
+          signals: [signal, { ...signal, quote: 'fabricated evidence', sourceId: 'missing' }],
+        },
+        {
+          ...history[0],
+          id: 'step-2',
+          question: { ...introduction, id: 'question-2', lifeArea: 'learning' },
+          answer: 'Изучаю новые учебные темы',
+        },
+      ),
+      env,
+    )
+    expect(r.status).toBe(200)
+    const data = (await r.json()) as { session: { signals: { quote: string }[] } }
+    expect(data.session.signals.some((c) => c.quote === first.answer)).toBe(true)
+    expect(JSON.stringify(data)).not.toContain('fabricated evidence')
+    expect(mocks.parse.mock.calls[0][0].input).not.toContain('fabricated evidence')
+    expect(mocks.parse).toHaveBeenCalledTimes(1)
   })
   it('refuses paid requests when kill switch is off', async () => {
     const r = await worker.fetch(req({ mode: 'live', history }), { ...env, AI_ENABLED: 'false' })
@@ -102,19 +199,44 @@ describe('Worker API contracts and cost guards', () => {
   it('calls Responses structured parsing with bounded context and storage disabled', async () => {
     mocks.parse.mockResolvedValue({
       output_parsed: {
-        action: 'ASK',
-        claims: [
+        hypotheses: [],
+        signals: [
           {
             kind: 'fact',
             text: 'Читаю документы',
             quote: 'Читаю документы',
             sourceId: 'step-1',
             domain: 'research',
+            lifeArea: 'work',
+            confidence: 0.7,
             negative: false,
             toolId: null,
           },
         ],
-        question: { ...introduction, id: 'next', title: 'Какие документы вы чаще читаете?' },
+        candidateQuestions: [
+          {
+            ...introduction,
+            id: 'next',
+            component: 'ThisOrThat',
+            targetGap: 'learning',
+            lifeArea: 'learning',
+            title: 'Как вам интереснее учиться?',
+            options: [
+              {
+                id: 'reading',
+                label: 'Читать учебные статьи',
+                description: '',
+                assetId: 'education',
+              },
+              {
+                id: 'practice',
+                label: 'Изучать на практике',
+                description: '',
+                assetId: 'education',
+              },
+            ],
+          },
+        ],
       },
     })
     const r = await worker.fetch(req({ mode: 'live', history }), env)
@@ -122,6 +244,9 @@ describe('Worker API contracts and cost guards', () => {
     const data = (await r.json()) as { mode: string; memory: { confirmedFacts: unknown[] } }
     expect(data.mode).toBe('live')
     expect(data.memory.confirmedFacts).toHaveLength(1)
+    expect(data).toMatchObject({
+      question: { title: 'Как вам интереснее учиться?' },
+    })
     const call = mocks.parse.mock.calls[0][0]
     expect(call.model).toBe('gpt-6.1-sol')
     expect(call.store).toBe(false)
@@ -129,18 +254,25 @@ describe('Worker API contracts and cost guards', () => {
     expect(JSON.stringify(call.text.format.schema)).not.toMatch(/minLength|maxLength/)
     expect(JSON.parse(call.input).candidateTools.length).toBeLessThanOrEqual(8)
     expect(call.text.format.type).toBe('json_schema')
+    expect(Object.keys(call.text.format.schema.properties)).toEqual([
+      'signals',
+      'hypotheses',
+      'candidateQuestions',
+    ])
   })
   it('clips oversized model text and replaces an unusable question with a curated one', async () => {
     mocks.parse.mockResolvedValue({
       output_parsed: {
-        action: 'ASK',
-        claims: [
+        hypotheses: [],
+        signals: [
           {
             kind: 'fact',
             text: 'Читаю документы '.repeat(30),
             quote: 'Читаю документы',
             sourceId: 'step-1',
             domain: 'research',
+            lifeArea: 'work',
+            confidence: 0.7,
             negative: false,
             toolId: null,
           },
@@ -150,20 +282,26 @@ describe('Worker API contracts and cost guards', () => {
             quote: ' ',
             sourceId: 'step-1',
             domain: 'research',
+            lifeArea: 'work',
+            confidence: 0.7,
             negative: false,
             toolId: null,
           },
         ],
-        question: {
-          ...introduction,
-          id: 'next',
-          component: 'AppRecognition',
-          title: 'Что из этого вам знакомо?',
-          options: [
-            { id: 'chatgpt', label: 'ChatGPT', description: '', assetId: 'productivity' },
-            { id: 'excel', label: 'Excel', description: '', assetId: 'analytics' },
-          ],
-        },
+        candidateQuestions: [
+          {
+            ...introduction,
+            lifeArea: 'work',
+            targetGap: 'familiarity',
+            id: 'next',
+            component: 'AppRecognition',
+            title: 'Что из этого вам знакомо?',
+            options: [
+              { id: 'chatgpt', label: 'ChatGPT', description: '', assetId: 'productivity' },
+              { id: 'excel', label: 'Excel', description: '', assetId: 'analytics' },
+            ],
+          },
+        ],
       },
     })
     const r = await worker.fetch(req({ mode: 'live', history }), env)
@@ -177,15 +315,19 @@ describe('Worker API contracts and cost guards', () => {
     expect(data.question.id).toBe('question-2')
     expect(data.question.options.map((o) => o.id)).not.toContain('excel')
   })
-  it('rejects invalid model layouts and hides raw provider errors', async () => {
+  it('replaces invalid model layouts safely and hides raw provider errors', async () => {
     mocks.parse.mockResolvedValue({
       output_parsed: {
-        action: 'ASK',
-        claims: [],
-        question: { ...introduction, component: 'HTML' },
+        hypotheses: [],
+        signals: [],
+        candidateQuestions: [
+          { ...introduction, lifeArea: 'learning', targetGap: 'learning', component: 'HTML' },
+        ],
       },
     })
-    expect((await worker.fetch(req({ mode: 'live', history }), env)).status).toBe(502)
+    const fallback = await worker.fetch(req({ mode: 'live', history }), env)
+    expect(fallback.status).toBe(200)
+    expect(await fallback.json()).toMatchObject({ mode: 'live', action: 'EXPLORE' })
     mocks.parse.mockRejectedValue(new Error('secret user answer'))
     const r = await worker.fetch(req({ mode: 'live', history }), env)
     expect(r.status).toBe(502)

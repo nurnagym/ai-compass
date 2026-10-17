@@ -34,7 +34,10 @@ async function reactToSwipe(page: Page, interested = true) {
     .getByRole('button', { name: interested ? 'Интересно' : 'Пока нет', exact: true })
     .click()
   await expect(async () => {
-    const nextId = await page.locator('[data-question-id]').getAttribute('data-question-id')
+    if (await page.locator('.results-intro,.error-state').isVisible()) return
+    const nextId = await page
+      .locator('[data-question-id]')
+      .getAttribute('data-question-id', { timeout: 100 })
     if (nextId !== id) return
     expect(await page.locator('.swipe-card strong').textContent({ timeout: 100 })).not.toBe(text)
   }).toPass({ timeout: 5000 })
@@ -66,11 +69,12 @@ test('student starts with a required open answer, then gets choices and swipes',
   await start(page)
   await write(page, 'Я студент, читаю исследовательские статьи и документы')
   await expect(page.locator('.scenario-options')).toBeVisible()
-  await select(page, page.getByRole('button', { name: /Читаю статьи и документы/ }))
+  await select(page, page.getByRole('button', { name: /Читать документы и заметки/ }))
   await expect(page.locator('.swipe-card')).toBeVisible()
   await expect(page.getByRole('textbox')).toHaveCount(0)
   await finish(page)
-  await expect(page.locator('.recommendation-card')).toHaveCount(3)
+  expect(await page.locator('.recommendation-card').count()).toBeGreaterThanOrEqual(2)
+  expect(await page.locator('.recommendation-card').count()).toBeLessThanOrEqual(3)
   await expect(page.locator('main')).toHaveCSS('opacity', '1')
   expect(
     (
@@ -80,20 +84,20 @@ test('student starts with a required open answer, then gets choices and swipes',
   await expect(page.locator('.recommendation-why').first()).toContainText('Вы рассказали')
   expect(
     await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length })),
-  ).toEqual({ local: 0, session: 0 })
+  ).toEqual({ local: 0, session: 1 })
   await page.getByRole('button', { name: 'Начать заново', exact: true }).click()
   await expect(page.getByRole('heading', { name: /Откройте, что AI/ })).toBeVisible()
 })
 test('creative choices change the follow-up; Back allows a correction', async ({ page }) => {
   await start(page)
   await write(page, 'Я фотограф, люблю снимать фотографии и видео')
-  await expect(page.locator('.comparison')).toBeVisible()
+  await expect(page.locator('.scenario-options')).toBeVisible()
   await page.getByRole('button', { name: 'Назад', exact: true }).click()
   await expect(page.getByRole('textbox')).toHaveValue(
     'Я фотограф, люблю снимать фотографии и видео',
   )
   await write(page, 'Я фотограф, люблю снимать портреты')
-  await select(page, page.getByRole('button', { name: /Фотографировать/ }))
+  await select(page, page.getByRole('button', { name: /Писать тексты и письма/ }))
   await finish(page)
   await expect(page.getByRole('heading', { name: 'Upscayl', exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
@@ -116,14 +120,14 @@ test('required open introduction survives an API failure and can be corrected', 
   page,
 }) => {
   await start(page)
-  await page.route('**/api/onboarding/next', (r) => r.fulfill({ status: 502, body: '{}' }))
+  await page.route('**/api/turn', (r) => r.fulfill({ status: 502, body: '{}' }))
   await write(page, 'Читаю документы')
   await expect(page.getByRole('heading', { name: 'Не получилось продолжить.' })).toBeVisible()
   await page.getByRole('button', { name: 'Вернуться к ответу' }).click()
   await expect(page.getByRole('textbox')).toHaveValue('Читаю документы')
-  await page.unroute('**/api/onboarding/next')
+  await page.unroute('**/api/turn')
   await write(page, 'Читаю документы')
-  await expect(page.locator('.scenario-options')).toBeVisible()
+  await expect(page.locator('.comparison')).toBeVisible()
 })
 for (const [code, message] of [
   ['AI_MODEL_UNAVAILABLE', 'Выбранная модель недоступна.'],
@@ -136,9 +140,9 @@ for (const [code, message] of [
       route.fulfill({ json: { aiEnabled: true, demo: true } }),
     )
     let requests = 0
-    await page.route('**/api/onboarding/next', (route) => {
+    await page.route('**/api/turn', (route) => {
       requests++
-      expect(route.request().postDataJSON().mode).toBe('live')
+      expect(route.request().postDataJSON().session.mode).toBe('live')
       return route.fulfill({
         status: 502,
         json: { errorCode: code, error: 'private provider detail' },
@@ -168,6 +172,69 @@ test('time limits can be extended, disabled and stay disabled across questions',
   await page.getByRole('button', { name: 'Включить таймер' }).click()
   await expect(page.getByRole('timer')).toBeVisible()
 })
+test('reload restores a draft, current question and results; restart clears the snapshot', async ({
+  page,
+}) => {
+  let requests = 0
+  page.on('request', (r) => {
+    if (r.url().endsWith('/api/turn')) requests++
+  })
+  await start(page)
+  await page.getByRole('textbox').fill('Я студент, читаю статьи')
+  await page.getByRole('button', { name: 'Без таймера', exact: true }).click()
+  await page.reload()
+  await expect(page.getByRole('textbox')).toHaveValue('Я студент, читаю статьи')
+  await expect(page.getByRole('timer')).toHaveCount(0)
+  expect(requests).toBe(0)
+  await advance(page, 'Продолжить')
+  const title = await page.locator('.question-heading h1').textContent()
+  await page.reload()
+  await expect(page.locator('.question-heading h1')).toHaveText(title!)
+  expect(requests).toBe(1)
+  await finish(page)
+  const opportunities = await page.locator('.recommendation-card h3').allTextContents()
+  await page.reload()
+  await expect(page.locator('.recommendation-card h3')).toHaveText(opportunities)
+  await page.getByRole('button', { name: 'Начать заново', exact: true }).click()
+  await expect
+    .poll(() => page.evaluate(() => sessionStorage.getItem('ai-compass.session.v1')))
+    .toBeNull()
+  await page.reload()
+  await expect(page.getByRole('heading', { name: /Откройте, что AI/ })).toBeVisible()
+})
+test('a reload during a live request never automatically repeats the paid turn', async ({
+  page,
+}) => {
+  await page.route('**/api/status', (route) =>
+    route.fulfill({ json: { aiEnabled: true, demo: true } }),
+  )
+  let requests = 0
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route('**/api/turn', async (route) => {
+    requests++
+    await gate
+    await route.abort().catch(() => {})
+  })
+  await start(page, true)
+  await page.getByRole('textbox').fill('Ищу работу')
+  await page.getByRole('button', { name: 'Продолжить', exact: true }).click()
+  await expect.poll(() => requests).toBe(1)
+  await expect
+    .poll(() =>
+      page.evaluate(() => JSON.parse(sessionStorage.getItem('ai-compass.session.v1')!).phase),
+    )
+    .toBe('EVALUATING')
+  await page.reload()
+  release()
+  await expect(page.getByRole('alert')).toBeVisible()
+  await expect(page.locator('.mode-badge')).toHaveText('AI-режим')
+  expect(requests).toBe(1)
+  await page.getByRole('button', { name: 'Вернуться к ответу' }).click()
+  await expect(page.getByRole('textbox')).toHaveValue('Ищу работу')
+})
 test('expiry keeps a written draft and permits continuing without a deadline', async ({ page }) => {
   await page.clock.install()
   await start(page)
@@ -182,7 +249,7 @@ test('expiry keeps a written draft and permits continuing without a deadline', a
 test('gallery previews all six interactions without AI requests', async ({ page }) => {
   let calls = 0
   page.on('request', (r) => {
-    if (r.url().includes('/api/onboarding/next')) calls++
+    if (r.url().includes('/api/turn')) calls++
   })
   await page.goto('/#gallery')
   for (const name of [

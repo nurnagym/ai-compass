@@ -1,14 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { buildMemory, extractDemoClaims, emptyMemory } from '../src/features/onboarding/memory'
-import {
-  evaluateTool,
-  rankTools,
-  questionPriority,
-  shouldFinish,
-} from '../src/features/evidence/evaluator'
+import { evaluateTool, rankTools } from '../src/features/evidence/evaluator'
 import { demoNext, introduction, personas } from '../src/features/onboarding/director'
 import { initialSession, sessionReducer } from '../src/features/onboarding/machine'
-import { directorSchema, requestSchema, validateQuestion } from '../src/lib/schemas'
+import { questionSchema, requestSchema, validateQuestion } from '../src/lib/schemas'
+import { estimateEIG, shouldFinishDiscovery } from '../src/features/evidence/scoring'
 import { toolById, catalog, verifiedCatalog } from '../src/data/catalog'
 import type { Claim, Interaction } from '../src/types/session'
 const h = (answer: string, id = 'step-1'): Interaction => ({
@@ -108,22 +104,43 @@ describe('readiness, constraints and ranking', () => {
     expect(result[0].score).toBeGreaterThan(70)
     expect(toolById(result[0].toolId)!.supportedUseCases).toContain('design')
   })
-  it('prioritizes contradictions and useful unknowns; rejects repeated gaps', () => {
-    expect(questionPriority('constraints', emptyMemory(), [])).toBe(85)
-    expect(questionPriority('constraints', emptyMemory(), ['constraints'])).toBe(0)
+  it('prioritizes practical constraints and excludes already asked titles', () => {
+    const constraint = {
+      ...introduction,
+      id: 'constraints',
+      targetGap: 'constraints' as const,
+      title: 'Где пробовать инструмент?',
+    }
+    const familiar = {
+      ...constraint,
+      targetGap: 'familiarity' as const,
+      title: 'Какие приложения знакомы?',
+    }
+    expect(estimateEIG(constraint, emptyMemory(), [])).toBeGreaterThan(
+      estimateEIG(familiar, emptyMemory(), []),
+    )
     expect(
-      questionPriority(
-        'research',
-        { ...emptyMemory(), contradictions: [{ domain: 'research', sourceIds: ['x'] }] },
-        [],
-      ),
-    ).toBe(100)
+      estimateEIG(constraint, emptyMemory(), [{ ...h('Только в браузере'), question: constraint }]),
+    ).toBe(-1000)
   })
-  it('enforces independent completion and a hard budget', () => {
-    expect(shouldFinish([], 3, 0, 0)).toBe(false)
-    expect(shouldFinish([], 4, 80, 0)).toBe(false)
-    expect(shouldFinish([], 7, 100, 2)).toBe(true)
-    expect(shouldFinish([], 4, 0, 0)).toBe(true)
+  it('enforces independent coverage and a hard budget before completion', () => {
+    expect(shouldFinishDiscovery(emptyMemory(), [h('Документы')], [], 0)).toBe(false)
+    expect(
+      shouldFinishDiscovery(
+        emptyMemory(),
+        Array.from({ length: 4 }, (_, i) => h('Документы', `step-${i}`)),
+        [],
+        0,
+      ),
+    ).toBe(false)
+    expect(
+      shouldFinishDiscovery(
+        emptyMemory(),
+        Array.from({ length: 7 }, (_, i) => h('', `step-${i}`)),
+        [],
+        100,
+      ),
+    ).toBe(true)
   })
   it('has 30 source-verified active catalog entries with HTTPS URLs', () => {
     expect(catalog.length).toBeGreaterThanOrEqual(30)
@@ -213,22 +230,12 @@ describe('director and state machine', () => {
     expect(sessionReducer(s, { type: 'RETRY' }).phase).toBe('EVALUATING')
   })
   it('rejects arbitrary components, URLs as assets and excessive histories', () => {
+    expect(questionSchema.safeParse({ ...introduction, component: '<script>' }).success).toBe(false)
     expect(
-      directorSchema.safeParse({
-        action: 'ASK',
-        claims: [],
-        question: { ...introduction, component: '<script>' },
-      }).success,
-    ).toBe(false)
-    expect(
-      directorSchema.safeParse({
-        action: 'ASK',
-        claims: [],
-        question: {
-          ...introduction,
-          component: 'ChoiceCards',
-          options: [{ id: 'a', label: 'a', description: '', assetId: 'https://evil.com' }],
-        },
+      questionSchema.safeParse({
+        ...introduction,
+        component: 'ChoiceCards',
+        options: [{ id: 'a', label: 'a', description: '', assetId: 'https://evil.com' }],
       }).success,
     ).toBe(false)
     expect(

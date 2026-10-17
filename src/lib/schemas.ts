@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { domains, assetIds, componentTypes, MAX_STEPS } from '../types/session'
+import { domains, assetIds, componentTypes, lifeAreas, MAX_STEPS } from '../types/session'
 const text = (n: number) => z.string().trim().min(1).max(n)
 export const optionSchema = z
   .object({
@@ -18,6 +18,7 @@ export const questionSchema = z
     options: z.array(optionSchema).max(6),
     multiple: z.boolean(),
     targetGap: z.enum([...domains, 'familiarity', 'constraints', 'introduction']),
+    lifeArea: z.enum(lifeAreas).optional(),
   })
   .strict()
 export const interactionSchema = z
@@ -62,55 +63,78 @@ export const claimSchema = z
     domain: z.enum(domains),
     negative: z.boolean(),
     toolId: z.string().max(60).nullable(),
+    lifeArea: z.enum(lifeAreas).optional(),
+    confidence: z.number().min(0).max(1).optional(),
   })
   .strict()
-const actionSchema = z.enum(['ASK', 'CLARIFY', 'EXPLORE', 'VALIDATE', 'RECOMMEND'])
-// No arbitrary HTML, assets, URLs, catalog entries, or layout structures are accepted.
-export const directorSchema = z
-  .object({
-    action: actionSchema,
-    claims: z.array(claimSchema).max(28),
-    question: questionSchema.nullable(),
-  })
-  .strict()
-// Shape sent to OpenAI Structured Outputs. Strict mode does not accept string length
-// keywords (minLength/maxLength), so the model sees the same structure without them;
-// every response is still validated against directorSchema on the server.
+// Only the shape goes to OpenAI; bounded claim/question validation runs on the server.
+// Do not put completion decisions or readiness scores in the model contract.
 const plain = z.string()
+const modelSignalSchema = z
+  .object({
+    kind: z.enum(['fact', 'goal', 'interest', 'tool']),
+    text: plain,
+    quote: plain,
+    sourceId: plain,
+    domain: z.enum(domains),
+    lifeArea: z.enum(lifeAreas),
+    confidence: z.number(),
+    negative: z.boolean(),
+    toolId: plain.nullable(),
+  })
+  .strict()
+export const modelQuestionSchema = z
+  .object({
+    id: plain,
+    component: z.enum(componentTypes),
+    title: plain,
+    description: plain,
+    options: z.array(
+      z.object({ id: plain, label: plain, description: plain, assetId: z.enum(assetIds) }).strict(),
+    ),
+    multiple: z.boolean(),
+    targetGap: z.enum([...domains, 'familiarity', 'constraints']),
+    lifeArea: z.enum(lifeAreas).nullable(),
+  })
+  .strict()
 export const directorModelSchema = z
   .object({
-    action: actionSchema,
-    claims: z.array(
+    signals: z.array(modelSignalSchema),
+    hypotheses: z.array(
       z
         .object({
-          kind: z.enum(['fact', 'goal', 'interest', 'tool', 'hypothesis']),
           text: plain,
           quote: plain,
           sourceId: plain,
           domain: z.enum(domains),
-          negative: z.boolean(),
-          toolId: plain.nullable(),
+          lifeArea: z.enum(lifeAreas),
         })
         .strict(),
     ),
-    question: z
-      .object({
-        id: plain,
-        component: z.enum(componentTypes),
-        title: plain,
-        description: plain,
-        options: z.array(
-          z
-            .object({ id: plain, label: plain, description: plain, assetId: z.enum(assetIds) })
-            .strict(),
-        ),
-        multiple: z.boolean(),
-        targetGap: z.enum([...domains, 'familiarity', 'constraints', 'introduction']),
-      })
-      .strict()
-      .nullable(),
+    candidateQuestions: z.array(modelQuestionSchema),
   })
   .strict()
+export const turnRequestSchema = z
+  .object({
+    session: z
+      .object({
+        version: z.literal(1),
+        mode: z.enum(['demo', 'live']),
+        history: z.array(interactionSchema).max(MAX_STEPS - 1),
+        signals: z.array(claimSchema).max(28).optional(),
+      })
+      .strip(), // Cached result/metrics may be round-tripped but are never trusted.
+    answer: interactionSchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const combined = requestSchema.safeParse({
+      mode: value.session.mode,
+      history: [...value.session.history, value.answer],
+    })
+    if (!combined.success)
+      ctx.addIssue({ code: 'custom', message: 'Invalid turn history or introduction' })
+  })
 export function validateQuestion(q: z.infer<typeof questionSchema>): boolean {
   if (new Set(q.options.map((o) => o.id)).size !== q.options.length) return false
   if (q.component === 'VoiceTextQuestion') return q.options.length === 0

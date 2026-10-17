@@ -49,7 +49,15 @@ export function RecommendationCard({
       <p className="recommendation-why">{recommendation.why}</p>
       <div className="first-action">
         <span>ПОПРОБУЙТЕ ДЛЯ НАЧАЛА</span>
-        <p>{recommendation.firstAction}</p>
+        {recommendation.workflow ? (
+          <ol>
+            {recommendation.workflow.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        ) : (
+          <p>{recommendation.firstAction}</p>
+        )}
       </div>
       <details>
         <summary>Что учесть</summary>

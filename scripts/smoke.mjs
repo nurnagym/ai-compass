@@ -12,16 +12,16 @@ const intro = {
   multiple: false,
   targetGap: 'introduction',
 }
-const rejected = await fetch(`${origin}/api/onboarding/next`, {
+const rejected = await fetch(`${origin}/api/turn`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    mode: 'demo',
-    history: [{ id: 'step-1', question: intro, answer: '', skipped: true }],
+    session: { version: 1, mode: 'demo', history: [] },
+    answer: { id: 'step-1', question: intro, answer: '', skipped: true },
   }),
 })
 assert.equal(rejected.status, 400)
-for (const name of ['student', 'creative', 'office', 'everyday', 'skipped']) {
+for (const name of ['student', 'creative', 'office', 'everyday', 'job', 'skipped']) {
   const history = []
   let question = intro,
     result
@@ -31,6 +31,7 @@ for (const name of ['student', 'creative', 'office', 'everyday', 'skipped']) {
       creative: 'Я фотограф, люблю снимать фотографии и видео',
       office: 'Работаю в офисе с документами, участвую во встречах',
       everyday: 'Люблю путешествовать и писать тексты о повседневной жизни',
+      job: 'Ищу работу',
       skipped: 'Пока не знаю',
     }
     const answer =
@@ -46,19 +47,33 @@ for (const name of ['student', 'creative', 'office', 'everyday', 'skipped']) {
                 ? question.options.map((o) => `Не знаком: ${o.label}`).join('; ')
                 : question.options[0].label
     history.push({ id: `step-${step + 1}`, question, answer, skipped: !answer })
-    const response = await fetch(`${origin}/api/onboarding/next`, {
+    const response = await fetch(`${origin}/api/turn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'demo', history }),
+      body: JSON.stringify({
+        session: { version: 1, mode: 'demo', history: history.slice(0, -1) },
+        answer: history.at(-1),
+      }),
     })
     assert.equal(response.status, 200)
-    result = await response.json()
+    const payload = await response.json()
+    result = payload.session.result
+    assert.equal(payload.action.type, result.question ? 'question' : 'results')
+    if (step === 0 && name === 'job') {
+      assert.notEqual(result.question.lifeArea, 'work')
+      assert.deepEqual(result.recommendations, [])
+    }
     if (!result.question) break
     question = result.question
   }
   assert.equal(result.action, 'RECOMMEND')
   assert.equal(result.question, null)
-  assert.ok(result.recommendations.length <= 3)
+  assert.ok(result.recommendations.length >= 2 && result.recommendations.length <= 3)
+  assert.equal(
+    new Set(result.recommendations.map((r) => r.lifeArea)).size,
+    result.recommendations.length,
+  )
+  assert.ok(result.recommendations.every((r) => r.workflow.length >= 2 && r.firstAction))
   assert.ok(history.slice(0, 3).some((h) => h.question.component === 'SwipeCards'))
   assert.equal(history[0].question.component, 'VoiceTextQuestion')
   assert.ok(history.slice(1).every((h) => h.question.component !== 'VoiceTextQuestion'))
@@ -69,6 +84,6 @@ for (const name of ['student', 'creative', 'office', 'everyday', 'skipped']) {
     if (name === 'skipped') assert.equal(r.exploratory, true)
   }
   console.log(
-    `${name}: ${history.length} steps, ${new Set(history.map((h) => h.question.component)).size} formats, ${result.recommendations.length} discoveries; required open intro, then adaptive interactions`,
+    `${name}: ${history.length} steps, ${new Set(history.map((h) => h.question.component)).size} formats, ${result.recommendations.length} discoveries; independent life areas, explicit scoring, practical workflows`,
   )
 }

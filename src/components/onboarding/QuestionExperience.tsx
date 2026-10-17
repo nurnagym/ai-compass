@@ -78,7 +78,10 @@ export function QuestionExperience({
           <VoiceTextQuestion
             {...props}
             initialAnswer={draft}
-            onDraftChange={setDraft}
+            onDraftChange={(text) => {
+              setDraft(text)
+              props.onDraftChange?.(text)
+            }}
             onBusyChange={setVoiceBusy}
           />
         </>

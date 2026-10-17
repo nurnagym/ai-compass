@@ -31,14 +31,8 @@ describe('quick adaptive journey policy', () => {
         if (i === 0) {
           expect(result.memory.goals).toEqual([])
           expect(result.memory.confirmedFacts.length).toBeGreaterThan(0)
-          expect(result.question?.targetGap).toBe(
-            {
-              student: 'learning',
-              creative: 'video',
-              office: 'communication',
-              everyday: 'everyday',
-            }[persona],
-          )
+          expect(result.question?.lifeArea).not.toBe(result.focus.coverage?.areas[0]?.lifeArea)
+          expect(result.question?.lifeArea).toBeTruthy()
           expect(result.question?.title).not.toMatch(/упростить|помощь|проблем/)
         }
         if (!result.question) break
@@ -55,37 +49,27 @@ describe('quick adaptive journey policy', () => {
       expect(history.some((h) => h.question.targetGap === 'constraints')).toBe(true)
     },
   )
-  it('lets the concrete second answer change the next question content', () => {
+  it('lets the second answer change the swipe content inside the newly explored area', () => {
     const first: Interaction = {
       id: 'step-1',
       question: introduction,
-      answer: 'Работа и рутина',
+      answer: 'Я фотограф',
       skipped: false,
     }
     const q = demoNext([first]).question!
-    const forWriting = demoNext([
-      first,
-      {
-        id: 'step-2',
-        question: q,
-        answer: q.options.find((o) => o.id === 'writing')!.label,
-        skipped: false,
-      },
-    ]).question!
-    const forAudio = demoNext([
-      first,
-      {
-        id: 'step-2',
-        question: q,
-        answer: q.options.find((o) => o.id === 'audio')!.label,
-        skipped: false,
-      },
-    ]).question!
-    expect(forWriting.component).toBe('SwipeCards')
-    expect(forAudio.component).toBe('SwipeCards')
-    expect(forWriting.targetGap).toBe('writing')
-    expect(forAudio.targetGap).toBe('communication')
-    expect(forWriting.options[0].label).not.toBe(forAudio.options[0].label)
+    const next = (id: string) =>
+      demoNext([
+        first,
+        {
+          id: 'step-2',
+          question: q,
+          answer: q.options.find((o) => o.id === id)!.label,
+          skipped: false,
+        },
+      ]).question!
+    expect(next('writing').component).toBe('SwipeCards')
+    expect(next('research').component).toBe('SwipeCards')
+    expect(next('writing').options[0].label).not.toBe(next('research').options[0].label)
   })
   it('does not let category diversity crowd out a stronger photography match', () => {
     const history: Interaction[] = [
@@ -171,7 +155,7 @@ describe('quick adaptive journey policy', () => {
         .question?.component,
     ).toBe('SwipeCards')
   })
-  it('lets the live director choose a focused open clarification after interactive steps', () => {
+  it('can prioritize an unexplored life area over another model-proposed clarification', () => {
     const history: Interaction[] = [
       { id: 'step-1', question: introduction, answer: 'Исследую документы', skipped: false },
       {
@@ -205,8 +189,9 @@ describe('quick adaptive journey policy', () => {
       { action: 'CLARIFY', question: clarification },
       'live',
     )
-    expect(result.question?.component).toBe('VoiceTextQuestion')
-    expect(result.question?.title).toBe(clarification.title)
+    expect(result.question?.lifeArea).not.toBe('work')
+    expect(result.question?.title).not.toBe(clarification.title)
+    expect(result.focus.questionScores?.some((q) => q.id === clarification.id)).toBe(true)
   })
   it('keeps rejecting a particular swipe separate from a blanket factual contradiction', () => {
     const history: Interaction[] = [

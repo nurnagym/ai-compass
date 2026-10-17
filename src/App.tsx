@@ -19,15 +19,17 @@ import { assets } from './data/assets'
 import { initialSession, sessionReducer } from './features/onboarding/machine'
 import { ru } from './lib/i18n'
 import { apiErrorMessage } from './lib/apiErrors'
+import { clearSession, readSession, saveSession } from './features/onboarding/storage'
 import type { DirectorResult } from './types/session'
 export default function App() {
-  const [restoredAnswer, setRestoredAnswer] = useState('')
-  const [session, dispatch] = useReducer(sessionReducer, undefined, initialSession),
-    [mode, setMode] = useState<'demo' | 'live'>('demo'),
+  const [bootstrap] = useState(readSession)
+  const [restoredAnswer, setRestoredAnswer] = useState(bootstrap?.draft ?? '')
+  const [session, dispatch] = useReducer(sessionReducer, bootstrap?.session ?? initialSession()),
+    [mode, setMode] = useState<'demo' | 'live'>(bootstrap?.mode ?? 'demo'),
     [liveAvailable, setLiveAvailable] = useState(false),
     [gallery, setGallery] = useState(import.meta.env.DEV && location.hash === '#gallery'),
     [privacy, setPrivacy] = useState(false),
-    [timerEnabled, setTimerEnabled] = useState(true)
+    [timerEnabled, setTimerEnabled] = useState(bootstrap?.timerEnabled ?? true)
   const requestId = useRef(0),
     busy = useRef(false),
     controller = useRef<AbortController | null>(null),
@@ -45,18 +47,23 @@ export default function App() {
     if (session.phase !== 'WELCOME' && session.phase !== 'EVALUATING') heading.current?.focus()
   }, [session.phase, session.question.id])
   useEffect(() => {
-    function clear() {
+    saveSession({ session, mode, timerEnabled, draft: restoredAnswer })
+  }, [session, mode, timerEnabled, restoredAnswer])
+  useEffect(() => {
+    function cancelRequest() {
       requestId.current++
       controller.current?.abort()
       busy.current = false
-      dispatch({ type: 'RESTART' })
-      setTimerEnabled(true)
-      setRestoredAnswer('')
+      dispatch({
+        type: 'FAIL',
+        message: 'Запрос был прерван. Можно повторить его или вернуться к ответу.',
+      })
     }
-    window.addEventListener('pagehide', clear)
-    return () => window.removeEventListener('pagehide', clear)
+    window.addEventListener('pagehide', cancelRequest)
+    return () => window.removeEventListener('pagehide', cancelRequest)
   }, [])
   function restart() {
+    clearSession()
     requestId.current++
     controller.current?.abort()
     busy.current = false
@@ -72,10 +79,26 @@ export default function App() {
     controller.current = abort
     const timeout = setTimeout(() => abort.abort(), 35000)
     try {
-      const response = await fetch('/api/onboarding/next', {
+      const response = await fetch('/api/turn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, history }),
+        body: JSON.stringify({
+          session: {
+            version: 1,
+            mode,
+            history: history.slice(0, -1),
+            signals: session.result
+              ? [
+                  ...session.result.memory.confirmedFacts,
+                  ...session.result.memory.goals,
+                  ...session.result.memory.interests,
+                  ...session.result.memory.toolsUsed,
+                  ...session.result.memory.hypotheses,
+                ].slice(0, 28)
+              : [],
+          },
+          answer: history.at(-1),
+        }),
         signal: abort.signal,
       })
       if (!response.ok) {
@@ -86,9 +109,10 @@ export default function App() {
             : undefined
         throw new Error(apiErrorMessage(code, response.status))
       }
-      const result = (await response.json()) as DirectorResult
+      const payload = (await response.json()) as { session?: { result?: DirectorResult } }
+      const result = payload.session?.result
       if (
-        !result.focus ||
+        !result?.focus ||
         !Array.isArray(result.recommendations) ||
         (!result.question && result.action !== 'RECOMMEND')
       )
@@ -278,7 +302,7 @@ export default function App() {
                   <div className="results-grid">
                     {session.result?.recommendations.map((r, i) => (
                       <motion.div
-                        key={r.toolId}
+                        key={r.opportunityId ?? r.toolId}
                         initial={{ opacity: 0, y: 16 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.1 }}
@@ -416,6 +440,7 @@ export default function App() {
                               key={session.question.id}
                               question={session.question}
                               initialAnswer={restoredAnswer}
+                              onDraftChange={setRestoredAnswer}
                               live={mode === 'live'}
                               timerEnabled={timerEnabled}
                               onTimerEnabledChange={setTimerEnabled}
@@ -499,7 +524,8 @@ function PrivacyDialog({ onClose, mode }: { onClose: () => void; mode: string })
       </p>
       <p>
         Мы не создаём аккаунт и не сохраняем ваши ответы в базе данных. Не сообщайте чувствительные
-        данные. Кнопка «Начать заново» очищает сессию.
+        данные. Прохождение временно сохраняется в этой вкладке, чтобы продолжить после обновления
+        страницы. Кнопка «Начать заново» очищает его.
       </p>
       <Button onClick={onClose}>
         Понятно

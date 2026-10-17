@@ -1,5 +1,6 @@
 import type { Claim, Domain, Interaction, Memory } from '../../types/session'
 import { catalog } from '../../data/catalog'
+import { assertsDiagnosis, claimArea, inferLifeArea, normalized } from './lifeAreas'
 export const emptyMemory = (): Memory => ({
   confirmedFacts: [],
   goals: [],
@@ -17,13 +18,15 @@ export function buildMemory(claims: Claim[], history: Interaction[]): Memory {
     // An exact source quote is mandatory. Model assertions are never evidence by themselves.
     if (
       !source ||
+      assertsDiagnosis(claim.text) ||
       !claim.quote.trim() ||
       !source.answer.toLowerCase().includes(claim.quote.toLowerCase())
     )
       continue
     if (claim.kind === 'tool' && claim.toolId && !catalog.some((t) => t.id === claim.toolId))
       continue
-    const key = `${claim.kind}:${claim.domain}:${claim.sourceId}:${claim.negative}:${claim.toolId}`
+    const area = claim.lifeArea ?? inferLifeArea(claim.quote, source, claim.domain)
+    const key = `${claim.kind}:${claim.domain}:${area}:${claim.sourceId}:${claim.negative}:${claim.toolId}${claim.kind === 'hypothesis' ? ':' + normalized(claim.text) : ''}`
     if (seen.has(key)) continue
     seen.add(key)
     const field = {
@@ -33,13 +36,26 @@ export function buildMemory(claims: Claim[], history: Interaction[]): Memory {
       tool: 'toolsUsed',
       hypothesis: 'hypotheses',
     } as const
-    memory[field[claim.kind]].push(claim)
+    memory[field[claim.kind]].push({
+      ...claim,
+      lifeArea: area,
+      confidence: Math.max(
+        0,
+        Math.min(0.85, claim.confidence ?? (claim.kind === 'hypothesis' ? 0.25 : 0.65)),
+      ),
+    })
   }
   const supported = [...memory.confirmedFacts, ...memory.goals, ...memory.interests]
-  for (const domain of new Set(supported.map((c) => c.domain))) {
-    const items = supported.filter((c) => c.domain === domain && c.kind !== 'interest')
+  for (const key of new Set(supported.map((c) => `${c.domain}:${claimArea(c)}`))) {
+    const items = supported.filter(
+      (c) => `${c.domain}:${claimArea(c)}` === key && c.kind !== 'interest',
+    )
     if (items.some((c) => c.negative) && items.some((c) => !c.negative))
-      memory.contradictions.push({ domain, sourceIds: [...new Set(items.map((c) => c.sourceId))] })
+      memory.contradictions.push({
+        domain: items[0].domain,
+        lifeArea: claimArea(items[0]),
+        sourceIds: [...new Set(items.map((c) => c.sourceId))],
+      })
   }
   memory.unknowns = []
   if (!supported.some((c) => !c.negative)) memory.unknowns.push('Занятия и интересы человека')
@@ -62,8 +78,9 @@ const patterns: Record<Domain, RegExp> = {
   video: /видео|ролик|монтаж|video|film/i,
   audio: /аудио|голос|запис|расшифр|audio|voice|transcri/i,
   coding: /программ|разработ|код|coding|developer|software/i,
-  productivity: /рутин|повтор|админ|офис|задач|замет|организ|office|repetitive|admin|notes/i,
-  learning: /учусь|студент|уч[её]б|изуч|универс|student|learn|university/i,
+  productivity:
+    /рутин|повтор|админ|офис|задач|замет|организ|карьер|резюме|ваканс|ищу работу|office|repetitive|admin|notes/i,
+  learning: /учусь|студент|уч[её]б|учить|изуч|универс|student|learn|university/i,
   presentations: /презентац|слайд|presentation|slides/i,
   communication: /встреч|совещан|общени|перепис|meeting|communicat/i,
   everyday: /повседнев|обычн|(?:^|[^\p{L}])быт|рецепт|путешеств|everyday|recipe|travel/iu,

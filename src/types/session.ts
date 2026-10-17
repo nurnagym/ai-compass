@@ -13,6 +13,8 @@ export const domains = [
   'everyday',
 ] as const
 export type Domain = (typeof domains)[number]
+export const lifeAreas = ['work', 'learning', 'creativity', 'everyday', 'relationships'] as const
+export type LifeArea = (typeof lifeAreas)[number]
 export const assetIds = [
   'research',
   'analytics',
@@ -51,6 +53,7 @@ export interface Question {
   options: Option[]
   multiple: boolean
   targetGap: Domain | 'familiarity' | 'constraints' | 'introduction'
+  lifeArea?: LifeArea
 }
 export interface Interaction {
   id: string
@@ -66,6 +69,26 @@ export interface Claim {
   domain: Domain
   negative: boolean
   toolId: string | null
+  lifeArea?: LifeArea
+  confidence?: number
+}
+export interface DiscoveryHypothesis {
+  id: string
+  text: string
+  domain: Domain
+  lifeArea: LifeArea
+  sourceIds: string[]
+  confidence: number
+  status: 'tentative' | 'supported' | 'contradicted'
+}
+export interface Coverage {
+  areas: { lifeArea: LifeArea; sourceIds: string[] }[]
+  independentAreas: number
+  score: number
+}
+export interface QuestionCandidate {
+  question: Question
+  source: 'model' | 'curated'
 }
 export interface Memory {
   confirmedFacts: Claim[]
@@ -74,7 +97,7 @@ export interface Memory {
   toolsUsed: Claim[]
   hypotheses: Claim[]
   unknowns: string[]
-  contradictions: { domain: Domain; sourceIds: string[] }[]
+  contradictions: { domain: Domain; sourceIds: string[]; lifeArea?: LifeArea }[]
 }
 export interface Focus {
   currentGoal: string
@@ -84,6 +107,9 @@ export interface Focus {
   currentStep: number
   maxSteps: number
   completionStatus: 'collecting' | 'ready' | 'budget-reached'
+  coverage?: Coverage
+  hypotheses?: DiscoveryHypothesis[]
+  questionScores?: { id: string; approximateEIG: number; source: 'model' | 'curated' }[]
 }
 export interface Recommendation {
   toolId: string
@@ -94,6 +120,9 @@ export interface Recommendation {
   firstAction: string
   sourceIds: string[]
   evidenceQuotes: string[]
+  opportunityId?: string
+  lifeArea?: LifeArea
+  workflow?: string[]
 }
 export interface DirectorResult {
   action: Action

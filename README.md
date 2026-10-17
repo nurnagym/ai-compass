@@ -1,6 +1,8 @@
 # AI Compass
 
-A Russian-first, session-only AI discovery experience. A short open introduction and adaptive interactions become up to three useful tool discoveries, each with evidence, a practical first action, and an official product link. No accounts, database, or saved personal profile.
+A Russian-first, session-only AI discovery experience. A short open introduction and adaptive interactions become two or three practical AI workflows across different life areas, each with evidence, a practical first action, and an official product link. No accounts, database, or permanent personal profile; only the current tab uses sessionStorage.
+
+The supplied implementation requirements are preserved in [MVP v0.1 specification](docs/mvp-spec.md). The project keeps Vite, React and its existing Cloudflare Worker.
 
 ## Start locally
 
@@ -28,11 +30,13 @@ The first question is always **VoiceTextQuestion**: «Расскажите не�
 
 After the introduction, the engine first asks about activities and preferences relevant to that person, then explores useful opportunities through swipes. It chooses questions and formats from actual answers, without assuming difficulties or needs from an occupation or hobby. Demo mode uses curated rules; live mode uses the existing OpenAI Responses integration. Both retain safeguards against long interviews and consecutive open questions, introduce swipes early, check practical constraints, and terminate within seven interactions. The live director can select all six component types, including one additional short open clarification when useful. It does not return to three mandatory open questions. Back/restart always restore the same required open introduction.
 
+After «ищу работу», the next question explores another life area. Work, learning, creativity, everyday life and relationships are tracked separately from technical use cases such as writing or audio. A single biographical answer never counts as several independent probes. Results contain practical workflows, reasons, first steps and links from the existing verified local catalog. Some workflows may use the same tool in different contexts.
+
 Single-selection cards advance immediately. Multiple-selection cards still require Continue. On closed questions users can switch to editable text/voice and back to choices without losing their draft. Every actual answer retains evidence provenance; unselected options are never evidence.
 
 Each question has a **20-second timebox**, configurable through `ANSWER_SECONDS` in `src/hooks/useAnswerTimer.ts`. Users can add 20 seconds or disable time limits for the session. It pauses for hidden tabs, the privacy dialog, microphone permission, recording and transcription. New swipe cards receive a fresh budget. Expiry preserves the answer and shows a gentle prompt; it never submits an unconfirmed answer or skips the mandatory introduction.
 
-In demo mode the server extracts explicit keywords from the opening text and later choices, updates evidence, and selects curated questions. This is **deterministic simulation, not AI**. Product unfamiliarity does not imply use or rejection of that product's whole category. In live mode a key plus `AI_ENABLED=true` activates model-selected content through Structured Outputs. This change does not configure a key or enable paid calls.
+In demo mode the server extracts explicit keywords from the opening text and later choices, updates evidence, and selects curated questions. This is **deterministic simulation, not AI**. Product unfamiliarity does not imply use or rejection of that product's whole category. In live mode a key plus `AI_ENABLED=true` activates model-proposed content through Structured Outputs; code selects the question and completion. This change does not configure a key or enable paid calls.
 
 ## Enable the real AI director and voice
 
@@ -52,7 +56,7 @@ TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
 
 Restart the development server, then choose **Включить AI** on the welcome screen. The key is never included in the browser bundle. `OPENAI_API_KEY` is also accepted by the Worker for conventional deployments, but `COMPASS_API_KEY` avoids reserved names in cloud environment secret bindings. Do not prefix secrets with `VITE_`, commit them, or paste them into chat.
 
-Live questions use OpenAI **Responses API + Structured Outputs** with server-side Zod validation, `store: false`, a 25-second request timeout, zero automatic retries, and an 8,000-token response limit (it includes hidden reasoning tokens; `AI_REASONING_EFFORT=low` keeps them small — leave it empty for models without reasoning). `gpt-6.1-sol` is the default (the API has no model named plain `gpt-6.1`); model availability, current pricing, and a successful real Responses request must be confirmed in your OpenAI project. No authenticated GPT-6.1 Sol call has been validated in this workspace.
+Live questions use OpenAI **Responses API + Structured Outputs** with server-side Zod validation, `store: false`, a 25-second request timeout, zero automatic retries, and an 8,000-token response limit (it includes hidden reasoning tokens; `AI_REASONING_EFFORT=low` keeps them small — leave it empty for models without reasoning). `gpt-6.1-sol` is the configured default; model availability, current pricing, and a successful real Responses request must be confirmed in your OpenAI project. No authenticated GPT-6.1 Sol call has been validated in this workspace.
 
 Live API failures return an allowlisted `errorCode`, and the onboarding screen shows its corresponding Russian explanation: unavailable model, rejected key, access denied, exhausted quota, temporary rate limit, rejected request parameters, timeout or invalid/incomplete response. Raw provider error text, input and credentials are never returned or logged. A provider failure keeps the current answer and AI mode; the app does not silently switch to demo or retry paid calls. `/api/status` reports configuration only and does not contact OpenAI or establish model access.
 
@@ -63,7 +67,7 @@ Voice requests microphone permission only after a click. Recording is limited to
 ```bash
 npm run test          # memory, readiness, ranking, state machine, UI, Worker contracts
 npm run lint
-npm run smoke         # with the development server running; exercises five HTTP journeys
+npm run smoke         # with the development server running; exercises six HTTP journeys including job search
 npm run build         # strict TypeScript + Worker/static-asset production build
 npx playwright install chromium
 npm run test:e2e      # full desktop + mobile Chromium journeys
@@ -96,8 +100,10 @@ No deployment has been performed by this build task. A Cloudflare account and va
 ## Structure
 
 - `src/components/onboarding/` — six fixed, accessible interaction components, quick-answer/timer wrapper and dev gallery
-- `src/features/onboarding/` — explicit session state machine, ephemeral memory, demo director and orchestration
-- `src/features/evidence/` — deterministic evidence readiness, constraints, diversity ranking, information-gain heuristics
+- `src/features/onboarding/` — session state machine, cited signal memory, life-area interpretation, director and bounded tab-session restoration
+- `src/features/evidence/scoring.ts` — explicit opportunity RRS, approximate EIG, independent coverage, hypotheses and completion
+- `src/features/evidence/evaluator.ts` — existing tool compatibility and ranking checks reused by opportunity selection
+- `src/data/opportunities.ts` — curated life occasions, workflows and verified-tool mappings
 - `src/data/tools.json` — editable 40-product catalog, including 30 source-verified active entries
 - `src/data/assets.ts` — fixed Lucide asset allowlist; no generated images or remote image URLs
 - `src/lib/schemas.ts` — bounded request and Structured Output schemas
@@ -111,19 +117,41 @@ Each entry includes ID, official URL, category, conservative supported use cases
 
 Some popular cloud products remain pending because their authoritative product pages were blocked during this task. They do not appear in results. The active sample leans toward source-verifiable open tools and desktop apps. Installation limitations are always shown. Do not add pricing/integration claims without current authoritative evidence. The catalog is not sent wholesale to the model: each request includes at most eight verified candidates.
 
-## Readiness and question priorities
+## Turn contract and decision loop
 
-`src/features/evidence/evaluator.ts` documents prototype RRS heuristics: coverage up to 40, reliability up to 35, fit up to 25. These numbers are **not calibrated probabilities** and are not shown to users. Strong results require explicit positive evidence from at least two source interactions, a verified matching capability, score at least 75, and no known contradiction/incompatibility. Model hypotheses never raise readiness. Explicit negative facts/goals and unresolved factual contradictions disqualify matching candidates; negative swipe interests do not erase unrelated positive needs. Unfamiliarity is not classified as use. Familiar products receive a ranking penalty, not blanket exclusion.
+The browser uses `POST /api/turn` with `{ session: { version: 1, mode, history, signals }, answer: Interaction }`. The server returns `{ session: { version, mode, history, signals, result }, action: { type: 'question', question } | { type: 'results', recommendations } }`. The previous onboarding route remains a compatibility alias to the same engine. There is no Next.js migration or duplicate API implementation.
 
-Unknown needs yield clearly labeled exploratory ideas; incompatible tools are filtered even from exploratory results. Fewer than three results (including none) is valid when constraints leave insufficient candidates. We do not manufacture certainty. More refined per-capability device/OS/price constraints are future work; review the displayed limitations before installing any recommended tool.
+Every request validates bounded browser history and cited signals. Cached results or numeric scores are discarded. Signals survive later turns only when their exact quote and source are present in non-skipped history. Back discards subsequent sources. A live turn makes one server-only Responses request, returning `signals`, tentative `hypotheses`, and up to three `candidateQuestions`. The model is asked for 2–3 candidates including one outside the dominant area, but receives no completion field. The server adds curated candidates, validates formats and content, computes scores and chooses the next action. Invalid proposals use a safe prepared question; provider errors retain the explicit error screen.
 
-Question-priority heuristics rank contradictions (100), installation constraints (85), familiarity (65), and supported needs (55), while checking gaps together with their interaction format to allow focused clarification through a different mechanic. The model can propose completion but cannot override minimum interaction/evidence rules. The interview aims for 4–7 answers and always terminates at seven. Back removes later evidence so a corrected answer is re-evaluated; restart clears the entire session. Conflicting statements are not silently treated as corrections—use Back to correct the source answer.
+## Prototype RRS, approximate EIG and coverage
+
+These are transparent test heuristics, **not calibrated probabilities, measured entropy or OpenAI API features**. Scores are internal and are not shown as percentages to users.
+
+`calculateCoverage` counts independently answered life areas from cited positive signals. One interaction contributes at most one area; constraints, familiarity, skipped/vague answers and normalized duplicate answers add none. Coverage points equal `100 × independent areas / 5`. Different work topics do not establish independent life areas.
+
+`calculateRRS` scores a specific curated opportunity, not an application in isolation:
+
+- Independent cited source interactions: 20 points each, capped at 40.
+- Distinct supporting quotations: 10 points each, capped at 20.
+- Explicit goal or positive interest: 15 points; factual context alone: 5 points.
+- At least two independently explored areas: 15 points.
+- Answered practical constraints: 10 points.
+
+Unsupported hypotheses never add points. A strong match also requires at least two independent sources for the same opportunity, RRS ≥75, enough breadth and a compatible verified tool. Negative evidence and contradictions are scoped to the life area; declining work letters does not reject creative writing. Tentative alternatives remain separate and their confidence decreases with conflicting evidence.
+
+`estimateEIG` scores prepared questions: a new area adds 45 points until two areas are explored, then 15; an area or use case with only one supporting source adds 25; a relevant contradiction adds 35; installation constraints add 50; unfamiliar formats add 10. Repeat gaps lose 15 per previous probe; returning to an already supported area immediately loses 20. Answer effort costs 8 for open text or 1 for a closed choice. Repeated titles and a third probe of the same area/gap are excluded. These weights are hypotheses for testing, not learned or calibrated values.
+
+Completion is exclusively code-owned: before seven turns, require at least five answers, two independent areas, answered constraints, no unresolved factual contradictions, at least two strong opportunities, and next-question EIG <45. At seven turns the session always ends. Unsupported results are labeled exploratory; narrow or skipped sessions never become confident just because the budget ended. Prefer 2–3 different life areas; fewer results are possible when verified compatible tools are unavailable rather than inventing capabilities. Repeat detection is lexical and area classification in demo mode uses heuristics.
+
+## Current-tab restoration
+
+`sessionStorage` retains a bounded, versioned snapshot of this passage: history, cited signals, current question, mode, timer preference and text draft. Reload restores the screen; cached RRS/EIG and recommendations are recomputed from validated evidence and the local catalog. An interrupted request restores as a recoverable error and never automatically repeats a paid call. Restart removes this app's key without deleting other tab data. Storage-denied/private-browser cases continue in memory. Audio recordings, API keys and permanent identifiers are not stored. Browser session restoration may preserve sessionStorage according to browser settings; this is not a promise of deletion across all browser restarts.
 
 ## Privacy and abuse protection
 
-There is no localStorage, sessionStorage, IndexedDB, session cookie, persistent session ID, server history or database. Application memory exists in React state; requests carry at most seven interactions. Restart and pagehide clear it, including browser back/forward-cache navigation. Feedback is local to a recommendation card. No answers, audio or provider error text are logged. Worker observability (Workers Logs) is enabled for testing: it records request metadata and short reason codes such as `director: unusable AppRecognition question, using fallback`, never user content. Set `observability.enabled` to `false` in `wrangler.jsonc` to turn it off. Hosting infrastructure and AI providers may still process operational data under their own terms; `store: false` does **not** promise zero provider retention.
+There is no localStorage, IndexedDB, session cookie, persistent session ID, server history or database. Only the current passage is retained in tab-scoped sessionStorage; Restart clears it. Requests carry at most seven interactions and 28 validated cached signals. Feedback remains local to a recommendation card. Answers, audio, credentials and raw provider errors are never logged. Worker observability remains as configured for deployment metadata; it does not add application content logging. Hosting infrastructure and AI providers may process operational data under their terms; `store: false` does **not** promise zero provider retention.
 
-Request body size is checked while streaming (24 KB JSON / 4 MiB audio plus bounded multipart overhead), not just through Content-Length. Malformed model responses are rejected. Oversized model text is clipped, invalid claims are dropped, and an unusable proposed question (unknown catalog IDs, wrong option count) is replaced by the curated next question instead of stopping the session; model text is rendered as text by React. Both paid endpoints require the kill switch, a secret and a native limiter binding. Browser cross-origin requests are rejected. API responses are not cached. Keep source maps and tool access appropriately restricted in your deployment.
+Request body size is checked while streaming (24 KB JSON / 4 MiB audio plus bounded multipart overhead), not just through Content-Length. Malformed model output uses a safe prepared question without a second model call. Oversized model text is clipped, invalid claims are dropped, and an unusable proposed question (unknown catalog IDs, wrong option count) is replaced by the curated next question instead of stopping the session; model text is rendered as text by React. Both paid endpoints require the kill switch, a secret and a native limiter binding. Browser cross-origin requests are rejected. API responses are not cached. Keep source maps and tool access appropriately restricted in your deployment.
 
 Cloudflare rate limits are approximate and scoped to a location, not a global durable monthly budget. Shared IPs may share a quota, distributed attackers can spread requests, and duplicate calls from separate tabs are still separate calls. Configure Cloudflare WAF/Turnstile and tighter account limits before a larger public launch. No authentication or per-user record is added. Use provider project spending controls, monitor usage, start with text-only testing, and keep sessions small. The app cannot guarantee a $100 cap or a fixed number of sessions at any future model price.
 

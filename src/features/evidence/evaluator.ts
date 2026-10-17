@@ -113,20 +113,3 @@ export function rankTools(memory: Memory, history: Interaction[]): Recommendatio
   }
   return selected.sort((a, b) => b.score - a.score || a.toolId.localeCompare(b.toolId))
 }
-export function questionPriority(gap: string, memory: Memory, asked: string[]): number {
-  if (asked.includes(gap)) return 0
-  if (memory.contradictions.some((c) => c.domain === gap)) return 100
-  if (gap === 'constraints') return 85
-  if (gap === 'familiarity') return memory.toolsUsed.length ? 15 : 65
-  return [...memory.confirmedFacts, ...memory.goals].some((c) => c.domain === gap) ? 55 : 20
-}
-export function shouldFinish(
-  recommendations: Recommendation[],
-  count: number,
-  priority: number,
-  contradictions: number,
-): boolean {
-  if (count >= 7) return true
-  if (count < 4 || contradictions) return false
-  return recommendations.filter((r) => !r.exploratory).length >= 3 || priority < 30
-}
